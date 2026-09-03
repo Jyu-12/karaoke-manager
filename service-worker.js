@@ -1,4 +1,4 @@
-const CACHE_NAME = "karaoke-manager-v10-reset-no-sort";
+const CACHE_NAME = "karaoke-manager-v11-system-theme";
 const ASSETS = [
   "./",
   "./index.html",

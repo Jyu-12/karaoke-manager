@@ -1326,3 +1326,101 @@ html[data-theme="light"] .filter-chip.active {
     width: 100%;
   }
 }
+
+
+/* v11: "端末設定" テーマでOSのライト/ダークに正しく追従 */
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] {
+    color-scheme: light;
+    --bg: #f5f5f7;
+    --panel: #ffffff;
+    --panel-2: #f3f3f5;
+    --text: #18181b;
+    --muted: #6f6f78;
+    --line: #dedee3;
+    --accent: #18181b;
+    --accent-text: #ffffff;
+    --danger: #d84c4c;
+  }
+
+  html[data-theme="system"] body {
+    background:
+      radial-gradient(circle at 15% -10%, rgba(0,0,0,.05), transparent 28rem),
+      var(--bg);
+  }
+
+  html[data-theme="system"] .app-header {
+    background: rgba(245,245,247,.88);
+    border-bottom-color: rgba(0,0,0,.07);
+  }
+
+  html[data-theme="system"] .summary,
+  html[data-theme="system"] .controls,
+  html[data-theme="system"] .backup-panel {
+    background: #ffffff;
+    border-color: var(--line);
+    color: var(--text);
+  }
+
+  html[data-theme="system"] .summary-label,
+  html[data-theme="system"] .backup-panel p,
+  html[data-theme="system"] .select-row label {
+    color: var(--muted);
+  }
+
+  html[data-theme="system"] .search-box,
+  html[data-theme="system"] .filter-chip,
+  html[data-theme="system"] .ghost-btn,
+  html[data-theme="system"] .icon-btn,
+  html[data-theme="system"] select,
+  html[data-theme="system"] input[type="text"],
+  html[data-theme="system"] input[type="number"],
+  html[data-theme="system"] textarea {
+    background: var(--panel-2);
+    color: var(--text);
+  }
+
+  html[data-theme="system"] .search-box input {
+    color: var(--text);
+  }
+
+  html[data-theme="system"] .filter-chip.active {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] {
+    color-scheme: dark;
+    --bg: #0f0f12;
+    --panel: #17171b;
+    --panel-2: #202026;
+    --text: #f5f5f7;
+    --muted: #a6a6b0;
+    --line: #303038;
+    --accent: #f2f2f2;
+    --accent-text: #161618;
+    --danger: #ff6b6b;
+  }
+
+  html[data-theme="system"] body {
+    background:
+      radial-gradient(circle at 15% -10%, rgba(255,255,255,.08), transparent 28rem),
+      var(--bg);
+  }
+
+  html[data-theme="system"] .app-header {
+    background: rgba(15,15,18,.88);
+    border-bottom-color: rgba(255,255,255,.07);
+  }
+
+  html[data-theme="system"] .summary,
+  html[data-theme="system"] .controls,
+  html[data-theme="system"] .backup-panel {
+    background: rgba(23,23,27,.9);
+    border-color: var(--line);
+    color: var(--text);
+  }
+}

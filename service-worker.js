@@ -1,4 +1,4 @@
-const CACHE_NAME = "karaoke-manager-v11-system-theme";
+const CACHE_NAME = "karaoke-manager-v12-cloud-sync";
 const ASSETS = [
   "./",
   "./index.html",

@@ -1424,3 +1424,100 @@ html[data-theme="light"] .filter-chip.active {
     color: var(--text);
   }
 }
+
+
+/* v12: Supabase cloud sync */
+.cloud-status-btn {
+  min-width: 104px;
+}
+
+.cloud-status-btn.cloud-connected {
+  border-color: var(--text);
+  font-weight: 750;
+}
+
+.cloud-card {
+  display: grid;
+  gap: 15px;
+  padding: 20px;
+}
+
+.cloud-panel {
+  display: grid;
+  gap: 13px;
+}
+
+.cloud-panel > label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.cloud-panel input[type="email"],
+.cloud-panel input[type="password"] {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 11px 12px;
+  background: var(--panel-2);
+  color: var(--text);
+  outline: none;
+}
+
+.cloud-description {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.cloud-account {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+}
+
+.cloud-account span,
+.cloud-sync-summary span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.cloud-sync-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.cloud-sync-summary > div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+}
+
+.cloud-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cloud-actions > button {
+  flex: 1;
+}
+
+@media (max-width: 640px) {
+  .cloud-sync-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .cloud-status-btn {
+    width: 100%;
+  }
+}

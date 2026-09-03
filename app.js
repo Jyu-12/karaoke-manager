@@ -12,6 +12,18 @@ let pendingJoysoundScores = [];
 const QUICK_TAGS_KEY = "karaokeManagerQuickTagsV1";
 const THEME_KEY = "karaokeManagerThemeV1";
 const SESSION_HOURS = 12;
+
+const SUPABASE_URL = "https://zrihlqlqgpbmtlhigceb.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_9OK0z69_4ZSo_RVX9WXXfQ_x7nMOWEk";
+const CLOUD_AUTH_KEY = "karaokeCloudAuthV1";
+const CLOUD_DIRTY_KEY = "karaokeCloudDirtyIdsV1";
+const CLOUD_TOMBSTONES_KEY = "karaokeCloudTombstonesV1";
+const CLOUD_INITIALIZED_KEY = "karaokeCloudInitializedV1";
+const CLOUD_LAST_SYNC_KEY = "karaokeCloudLastSyncV1";
+
+let cloudAuth = null;
+let cloudSyncInProgress = false;
+let suppressCloudWrite = false;
 const DEFAULT_QUICK_TAGS = [
   "バラード",
   "盛り上がる",
@@ -36,6 +48,22 @@ const els = {
   themeSelect: document.querySelector("#themeSelect"),
   addSongBtn: document.querySelector("#addSongBtn"),
   continuousAddBtn: document.querySelector("#continuousAddBtn"),
+  cloudBtn: document.querySelector("#cloudBtn"),
+  cloudBtnText: document.querySelector("#cloudBtnText"),
+  cloudDialog: document.querySelector("#cloudDialog"),
+  closeCloudDialogBtn: document.querySelector("#closeCloudDialogBtn"),
+  cloudLoggedOutPanel: document.querySelector("#cloudLoggedOutPanel"),
+  cloudLoggedInPanel: document.querySelector("#cloudLoggedInPanel"),
+  cloudEmailInput: document.querySelector("#cloudEmailInput"),
+  cloudPasswordInput: document.querySelector("#cloudPasswordInput"),
+  cloudLoginError: document.querySelector("#cloudLoginError"),
+  cloudLoginBtn: document.querySelector("#cloudLoginBtn"),
+  cloudUserEmail: document.querySelector("#cloudUserEmail"),
+  cloudSyncState: document.querySelector("#cloudSyncState"),
+  cloudLastSync: document.querySelector("#cloudLastSync"),
+  cloudSyncMessage: document.querySelector("#cloudSyncMessage"),
+  cloudSyncNowBtn: document.querySelector("#cloudSyncNowBtn"),
+  cloudLogoutBtn: document.querySelector("#cloudLogoutBtn"),
   manageTagsBtn: document.querySelector("#manageTagsBtn"),
   statsBtn: document.querySelector("#statsBtn"),
   sessionHistoryBtn: document.querySelector("#sessionHistoryBtn"),
@@ -135,6 +163,476 @@ const els = {
   randomCloseBtn: document.querySelector("#randomCloseBtn"),
 };
 
+
+function loadCloudAuth() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CLOUD_AUTH_KEY) || "null");
+    if (parsed?.access_token && parsed?.refresh_token && parsed?.user?.id) {
+      cloudAuth = parsed;
+      return parsed;
+    }
+  } catch {}
+  cloudAuth = null;
+  return null;
+}
+
+function saveCloudAuth(auth) {
+  cloudAuth = auth || null;
+  if (auth) {
+    localStorage.setItem(CLOUD_AUTH_KEY, JSON.stringify(auth));
+  } else {
+    localStorage.removeItem(CLOUD_AUTH_KEY);
+  }
+  updateCloudUI();
+}
+
+function getDirtyIds() {
+  try {
+    const data = JSON.parse(localStorage.getItem(CLOUD_DIRTY_KEY) || "[]");
+    return new Set(Array.isArray(data) ? data : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveDirtyIds(set) {
+  localStorage.setItem(CLOUD_DIRTY_KEY, JSON.stringify([...set]));
+}
+
+function markDirty(id) {
+  if (!id) return;
+  const dirty = getDirtyIds();
+  dirty.add(id);
+  saveDirtyIds(dirty);
+}
+
+function clearDirty(id) {
+  const dirty = getDirtyIds();
+  dirty.delete(id);
+  saveDirtyIds(dirty);
+}
+
+function getTombstones() {
+  try {
+    const data = JSON.parse(localStorage.getItem(CLOUD_TOMBSTONES_KEY) || "{}");
+    return data && typeof data === "object" ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveTombstones(data) {
+  localStorage.setItem(CLOUD_TOMBSTONES_KEY, JSON.stringify(data || {}));
+}
+
+function addTombstone(id) {
+  if (!id) return;
+  const data = getTombstones();
+  data[id] = new Date().toISOString();
+  saveTombstones(data);
+}
+
+function clearTombstone(id) {
+  const data = getTombstones();
+  delete data[id];
+  saveTombstones(data);
+}
+
+function cloudHeaders(accessToken = null) {
+  const headers = {
+    "apikey": SUPABASE_PUBLISHABLE_KEY,
+    "Content-Type": "application/json"
+  };
+  const token = accessToken || cloudAuth?.access_token;
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
+}
+
+async function cloudFetch(path, options = {}, allowRefresh = true) {
+  const response = await fetch(`${SUPABASE_URL}${path}`, {
+    ...options,
+    headers: {
+      ...cloudHeaders(),
+      ...(options.headers || {})
+    }
+  });
+
+  if (response.status === 401 && allowRefresh && cloudAuth?.refresh_token) {
+    const refreshed = await refreshCloudSession();
+    if (refreshed) return cloudFetch(path, options, false);
+  }
+
+  return response;
+}
+
+async function loginCloud(email, password) {
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: cloudHeaders(null),
+    body: JSON.stringify({ email, password })
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.msg || data?.error_description || data?.message || "ログインできませんでした。");
+  }
+
+  saveCloudAuth(data);
+  return data;
+}
+
+async function refreshCloudSession() {
+  if (!cloudAuth?.refresh_token) return false;
+
+  try {
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: cloudHeaders(null),
+      body: JSON.stringify({ refresh_token: cloudAuth.refresh_token })
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.access_token) {
+      saveCloudAuth(null);
+      return false;
+    }
+
+    saveCloudAuth(data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function validateCloudSession() {
+  if (!cloudAuth?.access_token) return false;
+
+  try {
+    const response = await cloudFetch("/auth/v1/user", { method: "GET" });
+    if (!response.ok) {
+      if (response.status === 401) saveCloudAuth(null);
+      return false;
+    }
+    const user = await response.json();
+    if (user?.id) {
+      cloudAuth.user = user;
+      localStorage.setItem(CLOUD_AUTH_KEY, JSON.stringify(cloudAuth));
+      updateCloudUI();
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
+function cloudSongFromLocal(song) {
+  return {
+    id: song.id,
+    user_id: cloudAuth.user.id,
+    title: song.title,
+    artist: song.artist,
+    key: song.key === "" || song.key === null || song.key === undefined ? null : Number(song.key),
+    confidence: song.confidence || null,
+    favorite: !!song.favorite,
+    staple: !!song.staple,
+    practice: !!song.practice,
+    tags: parseTags(song.tags),
+    memo: song.memo || "",
+    dam_scores: damScoresOf(song),
+    joysound_scores: joysoundScoresOf(song),
+    created_at: song.createdAt || new Date().toISOString(),
+    updated_at: song.updatedAt || new Date().toISOString()
+  };
+}
+
+function localSongFromCloud(row) {
+  return {
+    id: row.id,
+    title: row.title || "",
+    artist: row.artist || "",
+    key: row.key === null || row.key === undefined ? "" : Number(row.key),
+    confidence: row.confidence || "",
+    favorite: !!row.favorite,
+    staple: !!row.staple,
+    practice: !!row.practice,
+    tags: parseTags(row.tags),
+    memo: row.memo || "",
+    damScores: normalizeScoreEntries(row.dam_scores),
+    joysoundScores: normalizeScoreEntries(row.joysound_scores),
+    createdAt: row.created_at || new Date().toISOString(),
+    updatedAt: row.updated_at || row.created_at || new Date().toISOString()
+  };
+}
+
+async function cloudUpsertSong(song) {
+  if (!cloudAuth?.user?.id) return false;
+
+  const response = await cloudFetch("/rest/v1/songs?on_conflict=id", {
+    method: "POST",
+    headers: {
+      "Prefer": "resolution=merge-duplicates,return=minimal"
+    },
+    body: JSON.stringify(cloudSongFromLocal(song))
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(text || `同期エラー (${response.status})`);
+  }
+
+  clearDirty(song.id);
+  clearTombstone(song.id);
+  return true;
+}
+
+async function cloudDeleteSong(id) {
+  if (!cloudAuth?.user?.id) return false;
+
+  const response = await cloudFetch(`/rest/v1/songs?id=eq.${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { "Prefer": "return=minimal" }
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(text || `削除同期エラー (${response.status})`);
+  }
+
+  clearDirty(id);
+  clearTombstone(id);
+  return true;
+}
+
+async function fetchCloudSongs() {
+  if (!cloudAuth?.user?.id) return [];
+
+  const response = await cloudFetch(
+    "/rest/v1/songs?select=*&order=updated_at.asc",
+    { method: "GET" }
+  );
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(text || `クラウド取得エラー (${response.status})`);
+  }
+
+  const rows = await response.json();
+  return Array.isArray(rows) ? rows.map(localSongFromCloud) : [];
+}
+
+async function putSongLocalOnly(song) {
+  suppressCloudWrite = true;
+  try {
+    await storeRequest("readwrite", store => store.put(song));
+  } finally {
+    suppressCloudWrite = false;
+  }
+}
+
+async function removeSongLocalOnly(id) {
+  suppressCloudWrite = true;
+  try {
+    await storeRequest("readwrite", store => store.delete(id));
+  } finally {
+    suppressCloudWrite = false;
+  }
+}
+
+async function replaceLocalSongs(cloudSongs) {
+  suppressCloudWrite = true;
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      const store = tx.objectStore(STORE);
+      store.clear();
+      for (const song of cloudSongs) store.put(song);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally {
+    suppressCloudWrite = false;
+  }
+  songs = await getAllSongs();
+  render();
+}
+
+async function uploadAllLocalSongs() {
+  const localSongs = await getAllSongs();
+  for (const song of localSongs) {
+    await cloudUpsertSong(song);
+  }
+  return localSongs.length;
+}
+
+async function syncCloud({ silent = false } = {}) {
+  if (!cloudAuth?.user?.id || cloudSyncInProgress) return false;
+
+  cloudSyncInProgress = true;
+  updateCloudUI("syncing");
+
+  try {
+    let cloudSongs = await fetchCloudSongs();
+    const localSongs = await getAllSongs();
+
+    // 初回同期:
+    // ・クラウドが空なら現在端末のデータをそのままアップロード
+    // ・端末が空ならクラウドをそのままダウンロード
+    // ・両方にある場合は union merge
+    const initialized = localStorage.getItem(CLOUD_INITIALIZED_KEY) === "1";
+
+    if (!initialized) {
+      if (cloudSongs.length === 0 && localSongs.length > 0) {
+        await uploadAllLocalSongs();
+        cloudSongs = await fetchCloudSongs();
+      } else if (localSongs.length === 0 && cloudSongs.length > 0) {
+        await replaceLocalSongs(cloudSongs);
+      } else if (localSongs.length > 0 && cloudSongs.length > 0) {
+        const cloudMap = new Map(cloudSongs.map(song => [song.id, song]));
+        for (const local of localSongs) {
+          const remote = cloudMap.get(local.id);
+          if (!remote) {
+            await cloudUpsertSong(local);
+            continue;
+          }
+          const localTime = new Date(local.updatedAt || 0).getTime();
+          const remoteTime = new Date(remote.updatedAt || 0).getTime();
+          if (localTime > remoteTime) await cloudUpsertSong(local);
+        }
+        cloudSongs = await fetchCloudSongs();
+        await replaceLocalSongs(cloudSongs);
+      }
+
+      localStorage.setItem(CLOUD_INITIALIZED_KEY, "1");
+    } else {
+      // 通常同期。クラウド側の削除も尊重するため dirty flag を利用。
+      const dirty = getDirtyIds();
+      const tombstones = getTombstones();
+
+      // 自端末で未同期の削除を先に反映。
+      for (const id of Object.keys(tombstones)) {
+        await cloudDeleteSong(id);
+      }
+
+      cloudSongs = await fetchCloudSongs();
+      const latestLocal = await getAllSongs();
+      const localMap = new Map(latestLocal.map(song => [song.id, song]));
+      const cloudMap = new Map(cloudSongs.map(song => [song.id, song]));
+
+      // Local -> cloud for unsynced edits/new songs.
+      for (const id of dirty) {
+        const local = localMap.get(id);
+        if (local) await cloudUpsertSong(local);
+      }
+
+      cloudSongs = await fetchCloudSongs();
+      const refreshedCloudMap = new Map(cloudSongs.map(song => [song.id, song]));
+
+      // Cloud is authoritative for records not marked dirty.
+      for (const local of latestLocal) {
+        if (getDirtyIds().has(local.id)) continue;
+        if (!refreshedCloudMap.has(local.id)) {
+          await removeSongLocalOnly(local.id);
+        }
+      }
+
+      // Download cloud rows, but don't overwrite a still-dirty local row.
+      for (const remote of cloudSongs) {
+        if (getDirtyIds().has(remote.id)) continue;
+        const current = localMap.get(remote.id);
+        if (!current) {
+          await putSongLocalOnly(remote);
+          continue;
+        }
+        const localTime = new Date(current.updatedAt || 0).getTime();
+        const remoteTime = new Date(remote.updatedAt || 0).getTime();
+        if (remoteTime >= localTime) await putSongLocalOnly(remote);
+      }
+
+      songs = await getAllSongs();
+      render();
+    }
+
+    const now = new Date().toISOString();
+    localStorage.setItem(CLOUD_LAST_SYNC_KEY, now);
+    updateCloudUI("synced");
+
+    if (!silent) {
+      setCloudMessage("同期が完了しました。");
+    }
+    return true;
+  } catch (error) {
+    console.error("Cloud sync failed:", error);
+    updateCloudUI("error");
+    setCloudMessage(`同期できませんでした：${readableCloudError(error)}`);
+    return false;
+  } finally {
+    cloudSyncInProgress = false;
+  }
+}
+
+function readableCloudError(error) {
+  const raw = String(error?.message || error || "");
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed?.message || parsed?.details || parsed?.hint || raw;
+  } catch {
+    return raw.slice(0, 300);
+  }
+}
+
+function setCloudMessage(text) {
+  if (els.cloudSyncMessage) els.cloudSyncMessage.textContent = text || "";
+}
+
+function updateCloudUI(state = null) {
+  const loggedIn = !!cloudAuth?.user?.id;
+  els.cloudLoggedOutPanel?.classList.toggle("hidden", loggedIn);
+  els.cloudLoggedInPanel?.classList.toggle("hidden", !loggedIn);
+
+  if (loggedIn) {
+    els.cloudBtnText.textContent = "同期";
+    els.cloudBtn.classList.add("cloud-connected");
+    els.cloudUserEmail.textContent = cloudAuth.user.email || "ログイン中";
+
+    const last = localStorage.getItem(CLOUD_LAST_SYNC_KEY);
+    els.cloudLastSync.textContent = last ? formatDateTime(last) : "まだ";
+  } else {
+    els.cloudBtnText.textContent = "クラウド";
+    els.cloudBtn.classList.remove("cloud-connected");
+  }
+
+  if (state === "syncing") {
+    els.cloudSyncState.textContent = "同期中…";
+    els.cloudSyncNowBtn.disabled = true;
+  } else if (state === "error") {
+    els.cloudSyncState.textContent = "要確認";
+    els.cloudSyncNowBtn.disabled = false;
+  } else if (loggedIn) {
+    const dirty = getDirtyIds().size + Object.keys(getTombstones()).length;
+    els.cloudSyncState.textContent = dirty ? `未同期 ${dirty}件` : "同期済み";
+    els.cloudSyncNowBtn.disabled = false;
+  }
+}
+
+function openCloudDialog() {
+  updateCloudUI();
+  els.cloudLoginError.textContent = "";
+  els.cloudDialog.showModal();
+  if (!cloudAuth?.user?.id) {
+    setTimeout(() => els.cloudEmailInput.focus(), 0);
+  }
+}
+
+async function logoutCloud() {
+  if (cloudAuth?.access_token) {
+    try {
+      await cloudFetch("/auth/v1/logout", { method: "POST" }, false);
+    } catch {}
+  }
+  saveCloudAuth(null);
+  localStorage.removeItem(CLOUD_INITIALIZED_KEY);
+  setCloudMessage("");
+}
+
 function openDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
@@ -173,10 +671,39 @@ async function getAllSongs() {
 
 async function putSong(song) {
   await storeRequest("readwrite", store => store.put(song));
+
+  if (suppressCloudWrite) return;
+
+  markDirty(song.id);
+  updateCloudUI();
+
+  if (cloudAuth?.user?.id && navigator.onLine) {
+    try {
+      await cloudUpsertSong(song);
+      updateCloudUI();
+    } catch (error) {
+      console.warn("Cloud upsert pending:", error);
+    }
+  }
 }
 
 async function removeSong(id) {
   await storeRequest("readwrite", store => store.delete(id));
+
+  if (suppressCloudWrite) return;
+
+  addTombstone(id);
+  clearDirty(id);
+  updateCloudUI();
+
+  if (cloudAuth?.user?.id && navigator.onLine) {
+    try {
+      await cloudDeleteSong(id);
+      updateCloudUI();
+    } catch (error) {
+      console.warn("Cloud delete pending:", error);
+    }
+  }
 }
 
 function makeId() {
@@ -1523,7 +2050,7 @@ async function deleteTag(tagName) {
 function exportJSON() {
   const data = {
     app: "Karaoke Manager",
-    version: 7,
+    version: 12,
     exportedAt: new Date().toISOString(),
     songs,
     settings: {
@@ -1763,6 +2290,55 @@ function bindEvents() {
   els.continuousAddBtn.addEventListener("click", openContinuousAddDialog);
   els.themeSelect.addEventListener("change", () => applyTheme(els.themeSelect.value));
 
+  els.cloudBtn.addEventListener("click", openCloudDialog);
+  els.closeCloudDialogBtn.addEventListener("click", () => els.cloudDialog.close());
+
+  els.cloudLoginBtn.addEventListener("click", async () => {
+    const email = els.cloudEmailInput.value.trim();
+    const password = els.cloudPasswordInput.value;
+
+    els.cloudLoginError.textContent = "";
+    if (!email || !password) {
+      els.cloudLoginError.textContent = "メールアドレスとパスワードを入力してください。";
+      return;
+    }
+
+    els.cloudLoginBtn.disabled = true;
+    els.cloudLoginBtn.textContent = "ログイン中…";
+
+    try {
+      await loginCloud(email, password);
+      els.cloudPasswordInput.value = "";
+      setCloudMessage("ログインしました。初回同期を開始します…");
+      updateCloudUI("syncing");
+      await syncCloud({ silent: true });
+      setCloudMessage("クラウド同期の準備ができました。");
+    } catch (error) {
+      els.cloudLoginError.textContent = readableCloudError(error);
+    } finally {
+      els.cloudLoginBtn.disabled = false;
+      els.cloudLoginBtn.textContent = "ログインして同期";
+      updateCloudUI();
+    }
+  });
+
+  els.cloudPasswordInput.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      els.cloudLoginBtn.click();
+    }
+  });
+
+  els.cloudSyncNowBtn.addEventListener("click", () => syncCloud());
+  els.cloudLogoutBtn.addEventListener("click", async () => {
+    if (!confirm("クラウドからログアウトしますか？\n端末内の曲データは削除されません。")) return;
+    await logoutCloud();
+  });
+
+  window.addEventListener("online", () => {
+    if (cloudAuth?.user?.id) syncCloud({ silent: true });
+  });
+
   els.closeDialogBtn.addEventListener("click", () => els.songDialog.close());
   els.cancelBtn.addEventListener("click", () => els.songDialog.close());
   els.deleteSongBtn.addEventListener("click", deleteCurrentSong);
@@ -1907,6 +2483,11 @@ function bindEvents() {
       els.searchInput.select();
     }
 
+    if (event.key === "Escape" && els.cloudDialog.open) {
+      els.cloudDialog.close();
+      return;
+    }
+
     if (event.key === "Escape" && els.sessionHistoryDialog.open) {
       els.sessionHistoryDialog.close();
       return;
@@ -1952,7 +2533,16 @@ async function init() {
   els.sortSelect.value = "title";
   els.sortSelect2.value = "";
 
+  loadCloudAuth();
+  updateCloudUI();
   render();
+
+  if (cloudAuth?.access_token) {
+    const valid = await validateCloudSession();
+    if (valid && navigator.onLine) {
+      syncCloud({ silent: true });
+    }
+  }
 
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
     try {

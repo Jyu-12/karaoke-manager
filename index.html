@@ -28,6 +28,9 @@
           <option value="dark">ダーク</option>
         </select>
       </label>
+      <button id="cloudBtn" class="ghost-btn cloud-status-btn">
+        ☁ <span id="cloudBtnText">クラウド</span>
+      </button>
       <button id="continuousAddBtn" class="ghost-btn">連続追加</button>
       <button id="addSongBtn" class="primary-btn">＋ 曲を追加</button>
     </div>
@@ -150,6 +153,63 @@
       </div>
     </section>
   </main>
+
+  <dialog id="cloudDialog">
+    <div class="cloud-card">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">CLOUD SYNC</p>
+          <h2>クラウド同期</h2>
+        </div>
+        <button type="button" id="closeCloudDialogBtn" class="icon-btn" aria-label="閉じる">✕</button>
+      </div>
+
+      <div id="cloudLoggedOutPanel" class="cloud-panel">
+        <p class="cloud-description">
+          Supabaseにログインすると、Windows・iPhone・Androidなどで同じ曲データを共有できます。
+        </p>
+
+        <label>
+          メールアドレス
+          <input id="cloudEmailInput" type="email" autocomplete="username" placeholder="example@example.com">
+        </label>
+
+        <label>
+          パスワード
+          <input id="cloudPasswordInput" type="password" autocomplete="current-password" placeholder="パスワード">
+        </label>
+
+        <p id="cloudLoginError" class="form-error" role="alert"></p>
+
+        <button type="button" id="cloudLoginBtn" class="primary-btn">ログインして同期</button>
+      </div>
+
+      <div id="cloudLoggedInPanel" class="cloud-panel hidden">
+        <div class="cloud-account">
+          <span>ログイン中</span>
+          <strong id="cloudUserEmail">—</strong>
+        </div>
+
+        <div class="cloud-sync-summary">
+          <div>
+            <span>状態</span>
+            <strong id="cloudSyncState">同期済み</strong>
+          </div>
+          <div>
+            <span>最終同期</span>
+            <strong id="cloudLastSync">—</strong>
+          </div>
+        </div>
+
+        <p id="cloudSyncMessage" class="cloud-description"></p>
+
+        <div class="cloud-actions">
+          <button type="button" id="cloudSyncNowBtn" class="primary-btn">今すぐ同期</button>
+          <button type="button" id="cloudLogoutBtn" class="ghost-btn">ログアウト</button>
+        </div>
+      </div>
+    </div>
+  </dialog>
 
   <dialog id="songDialog">
     <form id="songForm" method="dialog">

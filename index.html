@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#17171a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Karaoke">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <link rel="icon" href="./icons/icon-192.png">
+  <link rel="stylesheet" href="./style.css">
+  <title>Karaoke Manager</title>
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">KARAOKE MANAGER</p>
+      <h1>曲管理</h1>
+    </div>
+    <div class="header-actions">
+      <label class="theme-control">
+        <span>テーマ</span>
+        <select id="themeSelect">
+          <option value="system">端末設定</option>
+          <option value="light">ライト</option>
+          <option value="dark">ダーク</option>
+        </select>
+      </label>
+      <button id="continuousAddBtn" class="ghost-btn">連続追加</button>
+      <button id="addSongBtn" class="primary-btn">＋ 曲を追加</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="summary">
+      <div>
+        <span class="summary-label">登録曲数</span>
+        <strong id="songCount">0</strong>
+      </div>
+      <div class="summary-actions">
+        <button id="sessionHistoryBtn" class="ghost-btn">🕘 セッション履歴</button>
+        <button id="statsBtn" class="ghost-btn">📊 統計</button>
+        <button id="manageTagsBtn" class="ghost-btn">🏷 タグ管理</button>
+        <button id="randomBtn" class="ghost-btn">🎲 ランダム選曲</button>
+      </div>
+    </section>
+
+    <section class="controls">
+      <label class="search-box">
+        <span>🔎</span>
+        <input id="searchInput" type="search" placeholder="曲名・アーティスト・タグ・メモを検索">
+      </label>
+
+      <div class="filter-row">
+        <button class="filter-chip active" data-filter="all">すべて</button>
+        <button class="filter-chip" data-filter="favorite">お気に入り</button>
+        <button class="filter-chip" data-filter="staple">定番曲</button>
+        <button class="filter-chip" data-filter="practice">練習中</button>
+        <button class="filter-chip" data-filter="hasKey">キーあり</button>
+        <button class="filter-chip" data-filter="noKey">キーなし</button>
+      </div>
+
+      <div class="select-row">
+        <label>
+          アーティスト
+          <select id="artistFilterSelect">
+            <option value="">すべてのアーティスト</option>
+          </select>
+        </label>
+
+        <label>
+          タグ
+          <select id="tagFilterSelect">
+            <option value="">すべてのタグ</option>
+          </select>
+        </label>
+
+        <label>
+          未歌唱回数
+          <select id="recentFilterSelect">
+            <option value="">指定なし</option>
+            <option value="never">一度も歌っていない</option>
+            <option value="1">1回以上のカラオケで未歌唱</option>
+            <option value="2">2回以上のカラオケで未歌唱</option>
+            <option value="3">3回以上のカラオケで未歌唱</option>
+            <option value="5">5回以上のカラオケで未歌唱</option>
+            <option value="10">10回以上のカラオケで未歌唱</option>
+          </select>
+        </label>
+
+        <label>
+          並べ替え 優先度1
+          <select id="sortSelect">
+            <option value="title" selected>曲名順</option>
+            <option value="createdDesc">登録が新しい順</option>
+            <option value="createdAsc">登録が古い順</option>
+            <option value="favoriteFirst">お気に入り優先</option>
+            <option value="artist">アーティスト順</option>
+            <option value="confidence">自信ランク順</option>
+            <option value="keyDesc">キーが高い順</option>
+            <option value="playCountDesc">歌唱回数が多い順</option>
+            <option value="lastSungDesc">最近歌った順</option>
+            <option value="missedSessionsDesc">未歌唱回数が多い順</option>
+          </select>
+        </label>
+
+        <label>
+          並べ替え 優先度2
+          <select id="sortSelect2">
+            <option value="" selected>指定なし</option>
+            <option value="title">曲名順</option>
+            <option value="createdDesc">登録が新しい順</option>
+            <option value="createdAsc">登録が古い順</option>
+            <option value="favoriteFirst">お気に入り優先</option>
+            <option value="artist">アーティスト順</option>
+            <option value="confidence">自信ランク順</option>
+            <option value="keyDesc">キーが高い順</option>
+            <option value="playCountDesc">歌唱回数が多い順</option>
+            <option value="lastSungDesc">最近歌った順</option>
+            <option value="missedSessionsDesc">未歌唱回数が多い順</option>
+          </select>
+        </label>
+
+        <div class="filter-reset-wrap">
+          <button id="resetFiltersBtn" type="button" class="ghost-btn reset-filters-btn">↺ リセット</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="songList" class="song-list" aria-live="polite"></section>
+
+    <section class="backup-panel">
+      <div>
+        <h2>バックアップ</h2>
+        <p>端末内の曲データをJSONとして保存・復元できます。</p>
+      </div>
+      <div class="backup-actions">
+        <button id="exportBtn" class="ghost-btn">JSONを書き出す</button>
+        <label class="ghost-btn file-btn">
+          JSONを読み込む
+          <input id="importInput" type="file" accept=".json,application/json">
+        </label>
+        <button id="exportCsvBtn" class="ghost-btn">CSVを書き出す</button>
+        <label class="ghost-btn file-btn">
+          CSVを読み込む
+          <input id="importCsvInput" type="file" accept=".csv,text/csv">
+        </label>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="songDialog">
+    <form id="songForm" method="dialog">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">SONG</p>
+          <h2 id="dialogTitle">曲を追加</h2>
+        </div>
+        <button type="button" id="closeDialogBtn" class="icon-btn" aria-label="閉じる">✕</button>
+      </div>
+
+      <input id="songId" type="hidden">
+
+      <label>
+        曲名 <span class="required">*</span>
+        <input id="titleInput" type="text" required maxlength="120" autocomplete="off" list="titleSuggestions">
+        <datalist id="titleSuggestions"></datalist>
+      </label>
+
+      <label>
+        アーティスト名 <span class="required">*</span>
+        <input id="artistInput" type="text" required maxlength="120" autocomplete="off" list="artistSuggestions">
+        <datalist id="artistSuggestions"></datalist>
+      </label>
+
+      <div class="form-grid">
+        <label>
+          キー
+          <select id="keyInput">
+            <option value="">未登録</option>
+            <option value="-6">-6</option><option value="-5">-5</option>
+            <option value="-4">-4</option><option value="-3">-3</option>
+            <option value="-2">-2</option><option value="-1">-1</option>
+            <option value="0">原曲</option>
+            <option value="1">+1</option><option value="2">+2</option>
+            <option value="3">+3</option><option value="4">+4</option>
+            <option value="5">+5</option><option value="6">+6</option>
+          </select>
+        </label>
+
+        <label>
+          自信ランク
+          <select id="confidenceInput">
+            <option value="">未設定</option>
+            <option value="A">A</option><option value="B">B</option>
+            <option value="C">C</option><option value="D">D</option>
+            <option value="E">E</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="flag-grid">
+        <label class="check-row">
+          <input id="favoriteInput" type="checkbox">
+          <span>お気に入り</span>
+        </label>
+        <label class="check-row">
+          <input id="stapleInput" type="checkbox">
+          <span>定番曲</span>
+        </label>
+        <label class="check-row">
+          <input id="practiceInput" type="checkbox">
+          <span>練習中</span>
+        </label>
+      </div>
+
+      <label>
+        タグ
+        <input id="tagsInput" type="text" maxlength="300" placeholder="例：バラード, 高音, 盛り上がる">
+        <small class="help-text">複数付ける場合は「,」または「、」で区切ります。</small>
+      </label>
+
+      <div class="quick-tag-section">
+        <div class="quick-tag-head">
+          <span>よく使うタグ</span>
+          <button type="button" id="editQuickTagsBtn" class="text-btn">編集</button>
+        </div>
+        <div id="quickTagButtons" class="quick-tag-buttons"></div>
+      </div>
+
+      <label>
+        メモ
+        <textarea id="memoInput" rows="4" maxlength="1000" placeholder="歌い方、注意点など"></textarea>
+      </label>
+
+      <section class="score-section">
+        <div class="score-section-head">
+          <div>
+            <span class="score-service">DAM</span>
+            <small id="damScoreCount">0件</small>
+          </div>
+        </div>
+        <div class="score-add-row">
+          <input id="damScoreInput" type="number" inputmode="decimal" min="0" max="100" step="0.001" placeholder="例：92.456">
+          <button type="button" id="addDamScoreBtn" class="ghost-btn">点数を追加</button>
+        </div>
+        <div id="damScoreList" class="score-history"></div>
+      </section>
+
+      <section class="score-section">
+        <div class="score-section-head">
+          <div>
+            <span class="score-service">JOYSOUND</span>
+            <small id="joysoundScoreCount">0件</small>
+          </div>
+        </div>
+        <div class="score-add-row">
+          <input id="joysoundScoreInput" type="number" inputmode="decimal" min="0" max="100" step="0.001" placeholder="例：94.321">
+          <button type="button" id="addJoysoundScoreBtn" class="ghost-btn">点数を追加</button>
+        </div>
+        <div id="joysoundScoreList" class="score-history"></div>
+      </section>
+
+      <div id="songStats" class="song-stats">
+        <span id="playCountText">歌唱 0回</span>
+        <span id="lastSungText">最終歌唱：なし</span>
+      </div>
+
+      <label id="continuousKeepArtistRow" class="check-row continuous-option hidden">
+        <input id="keepArtistInput" type="checkbox">
+        <span>保存後もアーティスト名を保持</span>
+      </label>
+
+      <p id="formError" class="form-error" role="alert"></p>
+
+      <div class="dialog-actions">
+        <button type="button" id="deleteSongBtn" class="danger-btn hidden">削除</button>
+        <button type="button" id="duplicateSongBtn" class="ghost-btn hidden">複製</button>
+        <span class="spacer"></span>
+        <button type="button" id="cancelBtn" class="ghost-btn">キャンセル</button>
+        <button type="submit" id="saveSongBtn" class="primary-btn">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="songDetailDialog">
+    <div class="detail-card">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">SONG DETAIL</p>
+          <h2 id="detailTitle">—</h2>
+          <p id="detailArtist" class="detail-subtitle">—</p>
+        </div>
+        <button type="button" id="closeDetailBtn" class="icon-btn" aria-label="閉じる">✕</button>
+      </div>
+
+      <div id="detailBadges" class="detail-badges"></div>
+      <div id="detailTags" class="tag-row"></div>
+
+      <section class="detail-summary-grid">
+        <div class="stat-tile">
+          <span>歌唱回数</span>
+          <strong id="detailPlayCount">0回</strong>
+        </div>
+        <div class="stat-tile">
+          <span>最終歌唱</span>
+          <strong id="detailLastSung">なし</strong>
+        </div>
+      </section>
+
+      <section class="detail-service-grid">
+        <div class="detail-service-card">
+          <div class="detail-service-head">
+            <h3>DAM</h3>
+            <span id="detailDamCount">0回</span>
+          </div>
+          <div class="service-stats">
+            <div><span>平均</span><strong id="detailDamAvg">—</strong></div>
+            <div><span>最高</span><strong id="detailDamBest">—</strong></div>
+          </div>
+          <div id="detailDamHistory" class="detail-score-history"></div>
+        </div>
+
+        <div class="detail-service-card">
+          <div class="detail-service-head">
+            <h3>JOYSOUND</h3>
+            <span id="detailJoyCount">0回</span>
+          </div>
+          <div class="service-stats">
+            <div><span>平均</span><strong id="detailJoyAvg">—</strong></div>
+            <div><span>最高</span><strong id="detailJoyBest">—</strong></div>
+          </div>
+          <div id="detailJoyHistory" class="detail-score-history"></div>
+        </div>
+      </section>
+
+      <section class="detail-memo">
+        <span>メモ</span>
+        <p id="detailMemo">—</p>
+      </section>
+
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" id="detailEditBtn" class="primary-btn">編集する</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="sessionHistoryDialog">
+    <div class="session-card">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">KARAOKE SESSIONS</p>
+          <h2>セッション履歴</h2>
+        </div>
+        <button type="button" id="closeSessionHistoryBtn" class="icon-btn" aria-label="閉じる">✕</button>
+      </div>
+
+      <p class="manager-note">
+        最初の採点から12時間以内の点数を1回のカラオケとして自動でまとめます。
+      </p>
+
+      <div id="sessionHistoryList" class="session-history-list"></div>
+
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" id="sessionHistoryDoneBtn" class="primary-btn">閉じる</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="statsDialog">
+    <div class="stats-card">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">STATISTICS</p>
+          <h2>統計</h2>
+        </div>
+        <button type="button" id="closeStatsBtn" class="icon-btn" aria-label="閉じる">✕</button>
+      </div>
+
+      <div id="statsOverview" class="stats-overview"></div>
+
+      <div class="stats-columns">
+        <section class="stats-section">
+          <h3>DAM</h3>
+          <div id="statsDam" class="stats-service"></div>
+        </section>
+        <section class="stats-section">
+          <h3>JOYSOUND</h3>
+          <div id="statsJoy" class="stats-service"></div>
+        </section>
+      </div>
+
+      <section class="stats-section">
+        <h3>よく歌う曲</h3>
+        <div id="statsTopSongs" class="stats-ranking"></div>
+      </section>
+
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" id="statsDoneBtn" class="primary-btn">閉じる</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="randomDialog">
+    <div class="random-card">
+      <p class="eyebrow">RANDOM PICK</p>
+      <h2 id="randomTitle">—</h2>
+      <p id="randomArtist">—</p>
+      <div id="randomMeta" class="meta-row"></div>
+      <div class="dialog-actions">
+        <button id="randomAgainBtn" class="ghost-btn">もう一度</button>
+        <button id="randomCloseBtn" class="primary-btn">閉じる</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="quickTagDialog">
+    <form id="quickTagForm" method="dialog">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">QUICK TAGS</p>
+          <h2>よく使うタグを編集</h2>
+        </div>
+        <button type="button" id="closeQuickTagDialogBtn" class="icon-btn" aria-label="閉じる">✕</button>
+      </div>
+
+      <label>
+        タグ一覧
+        <textarea id="quickTagsInput" rows="6" maxlength="500" placeholder="例：バラード, 盛り上がる, 練習中"></textarea>
+        <small class="help-text">「,」「、」または改行で区切れます。</small>
+      </label>
+
+      <div class="dialog-actions">
+        <button type="button" id="resetQuickTagsBtn" class="ghost-btn">初期値に戻す</button>
+        <span class="spacer"></span>
+        <button type="button" id="cancelQuickTagsBtn" class="ghost-btn">キャンセル</button>
+        <button type="submit" class="primary-btn">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="tagManagerDialog">
+    <div class="manager-card">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">TAG MANAGER</p>
+          <h2>タグ管理</h2>
+        </div>
+        <button type="button" id="closeTagManagerBtn" class="icon-btn" aria-label="閉じる">✕</button>
+      </div>
+      <p class="manager-note">タグ名の変更・削除は、そのタグが付いている全曲に反映されます。</p>
+      <div id="tagManagerList" class="tag-manager-list"></div>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" id="tagManagerDoneBtn" class="primary-btn">閉じる</button>
+      </div>
+    </div>
+  </dialog>
+
+  <template id="songCardTemplate">
+    <article class="song-card">
+      <button class="favorite-btn" aria-label="お気に入り切替">☆</button>
+      <button class="song-main">
+        <div class="song-title-row">
+          <h3 class="song-title"></h3>
+          <span class="key-badge"></span>
+        </div>
+        <p class="song-artist"></p>
+        <div class="meta-row">
+          <span class="confidence-badge"></span>
+          <span class="play-count-badge"></span>
+          <span class="missed-badge"></span>
+          <span class="memo-preview"></span>
+        </div>
+        <div class="tag-row"></div>
+      </button>
+    </article>
+  </template>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>

@@ -1,3 +1,4 @@
+const APP_VERSION = "v14";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -2161,7 +2162,7 @@ async function deleteTag(tagName) {
 function exportJSON() {
   const data = {
     app: "Karaoke Manager",
-    version: 13,
+    version: 14,
     exportedAt: new Date().toISOString(),
     songs,
     settings: {
@@ -2631,6 +2632,9 @@ function bindEvents() {
 }
 
 async function init() {
+  const versionEl = document.querySelector("#appVersion");
+  if (versionEl) versionEl.textContent = APP_VERSION;
+
   db = await openDB();
   songs = await getAllSongs();
   bindEvents();

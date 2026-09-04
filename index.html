@@ -18,7 +18,7 @@
     <div>
       <div class="brand-row">
         <p class="eyebrow">KARAOKE MANAGER</p>
-        <span id="appVersion" class="version-badge">v16</span>
+        <span id="appVersion" class="version-badge">v17</span>
         <button id="checkUpdateBtn" class="update-check-btn" type="button" title="最新版を確認">↻ 更新確認</button>
       </div>
       <h1>曲管理</h1>
@@ -304,6 +304,26 @@
         <textarea id="memoInput" rows="4" maxlength="1000" placeholder="歌い方、注意点など"></textarea>
       </label>
 
+      <div id="songStats" class="song-stats">
+        <span id="playCountText">歌唱 0回</span>
+        <span id="lastSungText">最終歌唱：なし</span>
+      </div>
+
+      <label id="continuousKeepArtistRow" class="check-row continuous-option hidden">
+        <input id="keepArtistInput" type="checkbox">
+        <span>保存後もアーティスト名を保持</span>
+      </label>
+
+      <p id="formError" class="form-error" role="alert"></p>
+
+      <div class="dialog-actions">
+        <button type="button" id="deleteSongBtn" class="danger-btn hidden">削除</button>
+        <button type="button" id="duplicateSongBtn" class="ghost-btn hidden">複製</button>
+        <span class="spacer"></span>
+        <button type="button" id="cancelBtn" class="ghost-btn">キャンセル</button>
+        <button type="submit" id="saveSongBtn" class="primary-btn">保存</button>
+      </div>
+
       <section class="score-section">
         <div class="score-section-head">
           <div>
@@ -332,25 +352,6 @@
         <div id="joysoundScoreList" class="score-history"></div>
       </section>
 
-      <div id="songStats" class="song-stats">
-        <span id="playCountText">歌唱 0回</span>
-        <span id="lastSungText">最終歌唱：なし</span>
-      </div>
-
-      <label id="continuousKeepArtistRow" class="check-row continuous-option hidden">
-        <input id="keepArtistInput" type="checkbox">
-        <span>保存後もアーティスト名を保持</span>
-      </label>
-
-      <p id="formError" class="form-error" role="alert"></p>
-
-      <div class="dialog-actions">
-        <button type="button" id="deleteSongBtn" class="danger-btn hidden">削除</button>
-        <button type="button" id="duplicateSongBtn" class="ghost-btn hidden">複製</button>
-        <span class="spacer"></span>
-        <button type="button" id="cancelBtn" class="ghost-btn">キャンセル</button>
-        <button type="submit" id="saveSongBtn" class="primary-btn">保存</button>
-      </div>
     </form>
   </dialog>
 

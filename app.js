@@ -1,4 +1,4 @@
-const APP_VERSION = "v16";
+const APP_VERSION = "v17";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -2210,6 +2210,65 @@ function renderQuickTagButtons() {
   }
 }
 
+
+function adjustSongKeyFromNumpad(direction) {
+  const raw = els.keyInput.value;
+
+  let next;
+  if (raw === "") {
+    next = direction > 0 ? 1 : -1;
+  } else {
+    next = Number(raw) + direction;
+  }
+
+  next = Math.max(-6, Math.min(6, next));
+  els.keyInput.value = String(next);
+  syncConfidenceAvailability();
+}
+
+function songFormEnterOrder() {
+  const fields = [
+    els.titleInput,
+    els.artistInput,
+    els.keyInput,
+    els.confidenceInput,
+    els.favoriteInput,
+    els.stapleInput,
+    els.practiceInput,
+    els.tagsInput,
+    els.memoInput
+  ];
+
+  if (formMode === "continuous" && !els.continuousKeepArtistRow.classList.contains("hidden")) {
+    fields.push(els.keepArtistInput);
+  }
+
+  fields.push(els.saveSongBtn);
+
+  return fields.filter(element => {
+    if (!element || element.disabled) return false;
+    const style = window.getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden";
+  });
+}
+
+function moveToNextSongFormItem(currentElement) {
+  const order = songFormEnterOrder();
+  const index = order.indexOf(currentElement);
+
+  if (index < 0) return false;
+
+  const next = order[index + 1];
+  if (!next) return false;
+
+  next.focus();
+  if (typeof next.select === "function" && (next.tagName === "INPUT" || next.tagName === "TEXTAREA")) {
+    next.select();
+  }
+
+  return true;
+}
+
 function setFormMode(mode) {
   formMode = mode;
   const isEdit = mode === "edit";
@@ -2591,7 +2650,7 @@ function updateBackupStatus() {
 function exportJSON() {
   const data = {
     app: "Karaoke Manager",
-    version: 16,
+    version: 17,
     exportedAt: new Date().toISOString(),
     songs,
     settings: {
@@ -2959,17 +3018,42 @@ function bindEvents() {
     els.joysoundScoreInput.focus();
   });
 
-  els.damScoreInput.addEventListener("keydown", event => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      els.addDamScoreBtn.click();
-    }
-  });
+  els.songForm.addEventListener("keydown", event => {
+    // Do not interfere with Japanese IME conversion confirmation.
+    if (event.isComposing || event.keyCode === 229) return;
 
-  els.joysoundScoreInput.addEventListener("keydown", event => {
-    if (event.key === "Enter") {
+    // Numpad + / - changes the karaoke key only while the song form is open.
+    if (event.code === "NumpadAdd") {
       event.preventDefault();
-      els.addJoysoundScoreBtn.click();
+      adjustSongKeyFromNumpad(1);
+      return;
+    }
+
+    if (event.code === "NumpadSubtract") {
+      event.preventDefault();
+      adjustSongKeyFromNumpad(-1);
+      return;
+    }
+
+    // In continuous-add mode only: Insert = save and move to the next song.
+    if (event.key === "Insert" && formMode === "continuous") {
+      if (event.repeat) {
+        event.preventDefault();
+        return;
+      }
+
+      event.preventDefault();
+      els.songForm.requestSubmit();
+      return;
+    }
+
+    // Enter moves through the main song-entry items.
+    // On the Save button itself, keep the normal Enter-to-save behavior.
+    if (event.key === "Enter" && event.target !== els.saveSongBtn) {
+      const moved = moveToNextSongFormItem(event.target);
+      if (moved) {
+        event.preventDefault();
+      }
     }
   });
 

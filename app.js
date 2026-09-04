@@ -363,24 +363,128 @@ function localSongFromCloud(row) {
   };
 }
 
+function mergeScoreEntries(a, b) {
+  const result = [];
+  const seen = new Set();
+
+  for (const entry of [...normalizeScoreEntries(a), ...normalizeScoreEntries(b)]) {
+    const key = `${Number(entry.score)}||${entry.recordedAt || ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(entry);
+  }
+
+  return result.sort((x, y) => (x.recordedAt || "").localeCompare(y.recordedAt || ""));
+}
+
+function mergeSameSong(localSong, cloudSong) {
+  const localTime = new Date(localSong.updatedAt || 0).getTime();
+  const cloudTime = new Date(cloudSong.updatedAt || 0).getTime();
+  const newer = localTime >= cloudTime ? localSong : cloudSong;
+  const older = newer === localSong ? cloudSong : localSong;
+
+  return {
+    id: cloudSong.id,
+    title: newer.title || older.title || "",
+    artist: newer.artist || older.artist || "",
+    key: newer.key === "" || newer.key === null || newer.key === undefined
+      ? (older.key === undefined ? "" : older.key)
+      : newer.key,
+    confidence: newer.confidence || older.confidence || "",
+    favorite: !!(localSong.favorite || cloudSong.favorite),
+    staple: !!(localSong.staple || cloudSong.staple),
+    practice: !!(localSong.practice || cloudSong.practice),
+    tags: parseTags([...parseTags(localSong.tags), ...parseTags(cloudSong.tags)]),
+    memo: newer.memo || older.memo || "",
+    damScores: mergeScoreEntries(localSong.damScores, cloudSong.damScores),
+    joysoundScores: mergeScoreEntries(localSong.joysoundScores, cloudSong.joysoundScores),
+    createdAt: [localSong.createdAt, cloudSong.createdAt].filter(Boolean).sort()[0] || new Date().toISOString(),
+    updatedAt: [localSong.updatedAt, cloudSong.updatedAt].filter(Boolean).sort().slice(-1)[0] || new Date().toISOString()
+  };
+}
+
+async function reconcileNaturalKeyDuplicates(localSongs, cloudSongs) {
+  const cloudByNaturalKey = new Map();
+  for (const remote of cloudSongs) cloudByNaturalKey.set(duplicateKey(remote), remote);
+
+  let changed = false;
+
+  for (const local of [...localSongs]) {
+    const remote = cloudByNaturalKey.get(duplicateKey(local));
+    if (!remote || remote.id === local.id) continue;
+
+    const merged = mergeSameSong(local, remote);
+    await putSongLocalOnly(merged);
+    await removeSongLocalOnly(local.id);
+
+    clearDirty(local.id);
+    clearTombstone(local.id);
+    markDirty(merged.id);
+    changed = true;
+  }
+
+  if (changed) {
+    songs = await getAllSongs();
+    render();
+  }
+
+  return changed;
+}
+
+async function findCloudNaturalDuplicate(song) {
+  const cloudSongs = await fetchCloudSongs();
+  return cloudSongs.find(remote => duplicateKey(remote) === duplicateKey(song)) || null;
+}
+
 async function cloudUpsertSong(song) {
   if (!cloudAuth?.user?.id) return false;
 
-  const response = await cloudFetch("/rest/v1/songs?on_conflict=id", {
+  let targetSong = song;
+
+  const doUpsert = currentSong => cloudFetch("/rest/v1/songs?on_conflict=id", {
     method: "POST",
-    headers: {
-      "Prefer": "resolution=merge-duplicates,return=minimal"
-    },
-    body: JSON.stringify(cloudSongFromLocal(song))
+    headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify(cloudSongFromLocal(currentSong))
   });
+
+  let response = await doUpsert(targetSong);
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    throw new Error(text || `同期エラー (${response.status})`);
+    const naturalConflict = response.status === 409 && text.includes("songs_unique_song_key");
+
+    if (!naturalConflict) {
+      throw new Error(text || `同期エラー (${response.status})`);
+    }
+
+    const remoteDuplicate = await findCloudNaturalDuplicate(targetSong);
+    if (!remoteDuplicate) {
+      throw new Error(text || "同じ曲のクラウドデータを特定できませんでした。");
+    }
+
+    const merged = mergeSameSong(targetSong, remoteDuplicate);
+
+    if (targetSong.id !== merged.id) {
+      await putSongLocalOnly(merged);
+      await removeSongLocalOnly(targetSong.id);
+      clearDirty(targetSong.id);
+      clearTombstone(targetSong.id);
+      markDirty(merged.id);
+      songs = await getAllSongs();
+      render();
+    }
+
+    targetSong = merged;
+    response = await doUpsert(targetSong);
+
+    if (!response.ok) {
+      const retryText = await response.text().catch(() => "");
+      throw new Error(retryText || `重複統合後の同期エラー (${response.status})`);
+    }
   }
 
-  clearDirty(song.id);
-  clearTombstone(song.id);
+  clearDirty(targetSong.id);
+  clearTombstone(targetSong.id);
   return true;
 }
 
@@ -471,7 +575,10 @@ async function syncCloud({ silent = false } = {}) {
 
   try {
     let cloudSongs = await fetchCloudSongs();
-    const localSongs = await getAllSongs();
+    let localSongs = await getAllSongs();
+
+    const reconciled = await reconcileNaturalKeyDuplicates(localSongs, cloudSongs);
+    if (reconciled) localSongs = await getAllSongs();
 
     // 初回同期:
     // ・クラウドが空なら現在端末のデータをそのままアップロード
@@ -524,6 +631,10 @@ async function syncCloud({ silent = false } = {}) {
       }
 
       cloudSongs = await fetchCloudSongs();
+
+      const reconciledAgain = await reconcileNaturalKeyDuplicates(await getAllSongs(), cloudSongs);
+      if (reconciledAgain) cloudSongs = await fetchCloudSongs();
+
       const refreshedCloudMap = new Map(cloudSongs.map(song => [song.id, song]));
 
       // Cloud is authoritative for records not marked dirty.
@@ -2050,7 +2161,7 @@ async function deleteTag(tagName) {
 function exportJSON() {
   const data = {
     app: "Karaoke Manager",
-    version: 12,
+    version: 13,
     exportedAt: new Date().toISOString(),
     songs,
     settings: {

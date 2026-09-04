@@ -1545,3 +1545,30 @@ html[data-theme="light"] .filter-chip.active {
   line-height: 1;
   letter-spacing: .04em;
 }
+
+
+/* v15: PWA update check */
+.update-check-btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  padding: 3px 7px;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.update-check-btn:hover {
+  color: var(--text);
+  border-color: currentColor;
+}
+
+.update-check-btn:disabled {
+  cursor: default;
+  opacity: .8;
+}

@@ -1,4 +1,4 @@
-const APP_VERSION = "v14";
+const APP_VERSION = "v15";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -51,6 +51,7 @@ const els = {
   continuousAddBtn: document.querySelector("#continuousAddBtn"),
   cloudBtn: document.querySelector("#cloudBtn"),
   cloudBtnText: document.querySelector("#cloudBtnText"),
+  checkUpdateBtn: document.querySelector("#checkUpdateBtn"),
   cloudDialog: document.querySelector("#cloudDialog"),
   closeCloudDialogBtn: document.querySelector("#closeCloudDialogBtn"),
   cloudLoggedOutPanel: document.querySelector("#cloudLoggedOutPanel"),
@@ -163,6 +164,103 @@ const els = {
   randomAgainBtn: document.querySelector("#randomAgainBtn"),
   randomCloseBtn: document.querySelector("#randomCloseBtn"),
 };
+
+
+function setUpdateButtonState(text, disabled = false) {
+  if (!els.checkUpdateBtn) return;
+  els.checkUpdateBtn.textContent = text;
+  els.checkUpdateBtn.disabled = disabled;
+}
+
+function waitForWorkerInstalled(worker) {
+  return new Promise(resolve => {
+    if (!worker || worker.state === "installed" || worker.state === "activated") {
+      resolve();
+      return;
+    }
+
+    const onStateChange = () => {
+      if (["installed", "activated", "redundant"].includes(worker.state)) {
+        worker.removeEventListener("statechange", onStateChange);
+        resolve();
+      }
+    };
+
+    worker.addEventListener("statechange", onStateChange);
+  });
+}
+
+async function fetchRemoteAppVersion() {
+  try {
+    const response = await fetch(`./version.json?t=${Date.now()}`, {
+      cache: "no-store"
+    });
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    return typeof data?.version === "string" ? data.version : null;
+  } catch {
+    return null;
+  }
+}
+
+async function checkForAppUpdate({ manual = true } = {}) {
+  if (!("serviceWorker" in navigator) || location.protocol === "file:") {
+    if (manual) {
+      setUpdateButtonState("更新確認不可", true);
+      setTimeout(() => setUpdateButtonState("↻ 更新確認", false), 1800);
+    }
+    return;
+  }
+
+  if (manual) setUpdateButtonState("確認中…", true);
+
+  try {
+    const remoteVersion = await fetchRemoteAppVersion();
+
+    let registration = await navigator.serviceWorker.getRegistration();
+    if (!registration) {
+      registration = await navigator.serviceWorker.register("./service-worker.js", {
+        updateViaCache: "none"
+      });
+    }
+
+    await registration.update();
+
+    let worker = registration.waiting || registration.installing;
+    if (worker) {
+      await waitForWorkerInstalled(worker);
+      worker = registration.waiting || worker;
+
+      if (worker && worker.state !== "redundant") {
+        worker.postMessage({ type: "SKIP_WAITING" });
+      }
+    }
+
+    if (remoteVersion && remoteVersion !== APP_VERSION) {
+      if (manual) setUpdateButtonState(`${remoteVersion}へ更新…`, true);
+
+      const url = new URL(location.href);
+      url.searchParams.set("appVersion", remoteVersion);
+      url.searchParams.set("_refresh", Date.now().toString());
+
+      setTimeout(() => location.replace(url.toString()), 250);
+      return;
+    }
+
+    if (manual) {
+      setUpdateButtonState("✓ 最新版です", true);
+      setTimeout(() => setUpdateButtonState("↻ 更新確認", false), 1600);
+    }
+  } catch (error) {
+    console.warn("Update check failed:", error);
+
+    if (manual) {
+      setUpdateButtonState("更新確認失敗", true);
+      setTimeout(() => setUpdateButtonState("↻ 更新確認", false), 1800);
+    }
+  }
+}
 
 
 function loadCloudAuth() {
@@ -2162,7 +2260,7 @@ async function deleteTag(tagName) {
 function exportJSON() {
   const data = {
     app: "Karaoke Manager",
-    version: 14,
+    version: 15,
     exportedAt: new Date().toISOString(),
     songs,
     settings: {
@@ -2403,6 +2501,9 @@ function bindEvents() {
   els.themeSelect.addEventListener("change", () => applyTheme(els.themeSelect.value));
 
   els.cloudBtn.addEventListener("click", openCloudDialog);
+  els.checkUpdateBtn?.addEventListener("click", () => {
+    checkForAppUpdate({ manual: true });
+  });
   els.closeCloudDialogBtn.addEventListener("click", () => els.cloudDialog.close());
 
   els.cloudLoginBtn.addEventListener("click", async () => {
@@ -2661,7 +2762,31 @@ async function init() {
 
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
     try {
-      await navigator.serviceWorker.register("./service-worker.js");
+      let reloadingForWorker = false;
+
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (reloadingForWorker) return;
+        reloadingForWorker = true;
+        location.reload();
+      });
+
+      const registration = await navigator.serviceWorker.register("./service-worker.js", {
+        updateViaCache: "none"
+      });
+
+      await registration.update();
+
+      if (registration.waiting) {
+        registration.waiting.postMessage({ type: "SKIP_WAITING" });
+      } else if (registration.installing) {
+        registration.installing.addEventListener("statechange", () => {
+          if (registration.waiting) {
+            registration.waiting.postMessage({ type: "SKIP_WAITING" });
+          }
+        });
+      }
+
+      checkForAppUpdate({ manual: false });
     } catch (error) {
       console.warn("Service worker registration failed:", error);
     }

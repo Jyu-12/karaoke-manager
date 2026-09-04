@@ -1572,3 +1572,24 @@ html[data-theme="light"] .filter-chip.active {
   cursor: default;
   opacity: .8;
 }
+
+
+/* v16: sync result and backup safety */
+.cloud-sync-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.backup-status {
+  font-size: 11px !important;
+  line-height: 1.5;
+}
+
+.backup-status.backup-warning {
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .cloud-sync-summary {
+    grid-template-columns: 1fr;
+  }
+}

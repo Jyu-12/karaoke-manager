@@ -1,4 +1,4 @@
-const APP_VERSION = "v15";
+const APP_VERSION = "v16";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -21,10 +21,16 @@ const CLOUD_DIRTY_KEY = "karaokeCloudDirtyIdsV1";
 const CLOUD_TOMBSTONES_KEY = "karaokeCloudTombstonesV1";
 const CLOUD_INITIALIZED_KEY = "karaokeCloudInitializedV1";
 const CLOUD_LAST_SYNC_KEY = "karaokeCloudLastSyncV1";
+const CLOUD_BASELINE_KEY = "karaokeCloudBaselinesV1";
+const CLOUD_LAST_RESULT_KEY = "karaokeCloudLastResultV1";
+const BACKUP_LAST_AT_KEY = "karaokeManagerLastBackupAtV1";
+const AUTO_SYNC_MIN_INTERVAL_MS = 10000;
 
 let cloudAuth = null;
 let cloudSyncInProgress = false;
 let suppressCloudWrite = false;
+let lastAutoSyncAttempt = 0;
+let cloudSyncTimer = null;
 const DEFAULT_QUICK_TAGS = [
   "バラード",
   "盛り上がる",
@@ -63,6 +69,7 @@ const els = {
   cloudUserEmail: document.querySelector("#cloudUserEmail"),
   cloudSyncState: document.querySelector("#cloudSyncState"),
   cloudLastSync: document.querySelector("#cloudLastSync"),
+  cloudLastResult: document.querySelector("#cloudLastResult"),
   cloudSyncMessage: document.querySelector("#cloudSyncMessage"),
   cloudSyncNowBtn: document.querySelector("#cloudSyncNowBtn"),
   cloudLogoutBtn: document.querySelector("#cloudLogoutBtn"),
@@ -71,6 +78,7 @@ const els = {
   sessionHistoryBtn: document.querySelector("#sessionHistoryBtn"),
   randomBtn: document.querySelector("#randomBtn"),
   exportBtn: document.querySelector("#exportBtn"),
+  backupStatus: document.querySelector("#backupStatus"),
   importInput: document.querySelector("#importInput"),
   exportCsvBtn: document.querySelector("#exportCsvBtn"),
   importCsvInput: document.querySelector("#importCsvInput"),
@@ -284,6 +292,199 @@ function saveCloudAuth(auth) {
   }
   updateCloudUI();
 }
+
+function syncSnapshot(song) {
+  if (!song) return null;
+  return {
+    id: song.id,
+    title: String(song.title || ""),
+    artist: String(song.artist || ""),
+    key: song.key === "" || song.key === null || song.key === undefined ? "" : Number(song.key),
+    confidence: String(song.confidence || ""),
+    favorite: !!song.favorite,
+    staple: !!song.staple,
+    practice: !!song.practice,
+    tags: parseTags(song.tags),
+    memo: String(song.memo || ""),
+    damScores: normalizeScoreEntries(song.damScores),
+    joysoundScores: normalizeScoreEntries(song.joysoundScores),
+    createdAt: song.createdAt || "",
+    updatedAt: song.updatedAt || ""
+  };
+}
+
+function getBaselines() {
+  try {
+    const data = JSON.parse(localStorage.getItem(CLOUD_BASELINE_KEY) || "{}");
+    return data && typeof data === "object" ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveBaselines(data) {
+  try {
+    localStorage.setItem(CLOUD_BASELINE_KEY, JSON.stringify(data || {}));
+  } catch (error) {
+    console.warn("Could not save sync baselines:", error);
+  }
+}
+
+function getBaseline(id) {
+  const baseline = getBaselines()[id];
+  return baseline ? syncSnapshot(baseline) : null;
+}
+
+function setBaseline(song) {
+  if (!song?.id) return;
+  const data = getBaselines();
+  data[song.id] = syncSnapshot(song);
+  saveBaselines(data);
+}
+
+function removeBaseline(id) {
+  const data = getBaselines();
+  delete data[id];
+  saveBaselines(data);
+}
+
+function replaceBaselines(cloudSongs) {
+  const next = {};
+  for (const song of cloudSongs || []) {
+    if (song?.id) next[song.id] = syncSnapshot(song);
+  }
+  saveBaselines(next);
+}
+
+function sameSyncValue(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function resolveThreeWayField(localValue, remoteValue, baseValue, localTime, remoteTime) {
+  const localChanged = !sameSyncValue(localValue, baseValue);
+  const remoteChanged = !sameSyncValue(remoteValue, baseValue);
+
+  if (localChanged && !remoteChanged) return { value: localValue, conflict: false };
+  if (!localChanged && remoteChanged) return { value: remoteValue, conflict: false };
+  if (!localChanged && !remoteChanged) return { value: remoteValue, conflict: false };
+  if (sameSyncValue(localValue, remoteValue)) return { value: localValue, conflict: false };
+
+  return {
+    value: localTime >= remoteTime ? localValue : remoteValue,
+    conflict: true
+  };
+}
+
+function threeWayTagMerge(localTags, remoteTags, baseTags) {
+  const makeMap = value => new Map(parseTags(value).map(tag => [normalizeText(tag), tag]));
+  const base = makeMap(baseTags);
+  const local = makeMap(localTags);
+  const remote = makeMap(remoteTags);
+  const result = new Map(base);
+
+  for (const key of base.keys()) {
+    if (!local.has(key) || !remote.has(key)) result.delete(key);
+  }
+  for (const [key, value] of local) if (!base.has(key)) result.set(key, value);
+  for (const [key, value] of remote) if (!base.has(key)) result.set(key, value);
+
+  return [...result.values()];
+}
+
+function scoreEntryKey(entry) {
+  return `${Number(entry?.score)}||${entry?.recordedAt || ""}`;
+}
+
+function threeWayScoreMerge(localScores, remoteScores, baseScores) {
+  const toMap = value => new Map(normalizeScoreEntries(value).map(entry => [scoreEntryKey(entry), entry]));
+  const base = toMap(baseScores);
+  const local = toMap(localScores);
+  const remote = toMap(remoteScores);
+  const result = new Map(base);
+
+  // If either side explicitly removed an old score, preserve that removal.
+  for (const key of base.keys()) {
+    if (!local.has(key) || !remote.has(key)) result.delete(key);
+  }
+  // New scores from either device are combined.
+  for (const [key, value] of local) if (!base.has(key)) result.set(key, value);
+  for (const [key, value] of remote) if (!base.has(key)) result.set(key, value);
+
+  return [...result.values()].sort((a, b) => (a.recordedAt || "").localeCompare(b.recordedAt || ""));
+}
+
+function threeWayMergeSong(localSong, remoteSong, baseline) {
+  if (!baseline) {
+    return { song: mergeSameSong(localSong, remoteSong), conflicts: 0 };
+  }
+
+  const local = syncSnapshot(localSong);
+  const remote = syncSnapshot(remoteSong);
+  const base = syncSnapshot(baseline);
+  const localTime = new Date(local.updatedAt || 0).getTime();
+  const remoteTime = new Date(remote.updatedAt || 0).getTime();
+  let conflicts = 0;
+
+  const field = name => {
+    const result = resolveThreeWayField(local[name], remote[name], base[name], localTime, remoteTime);
+    if (result.conflict) conflicts += 1;
+    return result.value;
+  };
+
+  return {
+    conflicts,
+    song: {
+      id: remote.id,
+      title: field("title"),
+      artist: field("artist"),
+      key: field("key"),
+      confidence: field("confidence"),
+      favorite: field("favorite"),
+      staple: field("staple"),
+      practice: field("practice"),
+      tags: threeWayTagMerge(local.tags, remote.tags, base.tags),
+      memo: field("memo"),
+      damScores: threeWayScoreMerge(local.damScores, remote.damScores, base.damScores),
+      joysoundScores: threeWayScoreMerge(local.joysoundScores, remote.joysoundScores, base.joysoundScores),
+      createdAt: [local.createdAt, remote.createdAt, base.createdAt].filter(Boolean).sort()[0] || new Date().toISOString(),
+      updatedAt: [local.updatedAt, remote.updatedAt].filter(Boolean).sort().slice(-1)[0] || new Date().toISOString()
+    }
+  };
+}
+
+function sameSongContent(a, b) {
+  if (!a || !b) return false;
+  const left = syncSnapshot(a);
+  const right = syncSnapshot(b);
+  delete left.updatedAt;
+  delete right.updatedAt;
+  return sameSyncValue(left, right);
+}
+
+function formatSyncResult(result) {
+  if (!result) return "—";
+  const parts = [
+    `↑${result.uploaded || 0}`,
+    `↓${result.downloaded || 0}`
+  ];
+  const deletes = (result.deletedUp || 0) + (result.deletedDown || 0);
+  if (deletes) parts.push(`削除${deletes}`);
+  if (result.conflicts) parts.push(`競合${result.conflicts}`);
+  return parts.join(" / ");
+}
+
+function saveSyncResult(result) {
+  localStorage.setItem(CLOUD_LAST_RESULT_KEY, JSON.stringify(result || {}));
+}
+
+function loadSyncResult() {
+  try {
+    return JSON.parse(localStorage.getItem(CLOUD_LAST_RESULT_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
 
 function getDirtyIds() {
   try {
@@ -602,6 +803,7 @@ async function cloudDeleteSong(id) {
 
   clearDirty(id);
   clearTombstone(id);
+  removeBaseline(id);
   return true;
 }
 
@@ -666,108 +868,216 @@ async function uploadAllLocalSongs() {
   return localSongs.length;
 }
 
-async function syncCloud({ silent = false } = {}) {
+async function syncCloud({ silent = false, reason = "manual" } = {}) {
   if (!cloudAuth?.user?.id || cloudSyncInProgress) return false;
 
   cloudSyncInProgress = true;
   updateCloudUI("syncing");
+
+  const result = {
+    uploaded: 0,
+    downloaded: 0,
+    deletedUp: 0,
+    deletedDown: 0,
+    conflicts: 0,
+    reason,
+    at: new Date().toISOString()
+  };
 
   try {
     let cloudSongs = await fetchCloudSongs();
     let localSongs = await getAllSongs();
 
     const reconciled = await reconcileNaturalKeyDuplicates(localSongs, cloudSongs);
-    if (reconciled) localSongs = await getAllSongs();
+    if (reconciled) {
+      localSongs = await getAllSongs();
+      result.conflicts += 1;
+    }
 
-    // 初回同期:
-    // ・クラウドが空なら現在端末のデータをそのままアップロード
-    // ・端末が空ならクラウドをそのままダウンロード
-    // ・両方にある場合は union merge
     const initialized = localStorage.getItem(CLOUD_INITIALIZED_KEY) === "1";
 
     if (!initialized) {
       if (cloudSongs.length === 0 && localSongs.length > 0) {
         await uploadAllLocalSongs();
+        result.uploaded += localSongs.length;
         cloudSongs = await fetchCloudSongs();
+        await replaceLocalSongs(cloudSongs);
       } else if (localSongs.length === 0 && cloudSongs.length > 0) {
         await replaceLocalSongs(cloudSongs);
+        result.downloaded += cloudSongs.length;
       } else if (localSongs.length > 0 && cloudSongs.length > 0) {
         const cloudMap = new Map(cloudSongs.map(song => [song.id, song]));
+
         for (const local of localSongs) {
           const remote = cloudMap.get(local.id);
           if (!remote) {
             await cloudUpsertSong(local);
+            result.uploaded += 1;
             continue;
           }
-          const localTime = new Date(local.updatedAt || 0).getTime();
-          const remoteTime = new Date(remote.updatedAt || 0).getTime();
-          if (localTime > remoteTime) await cloudUpsertSong(local);
+
+          const merged = threeWayMergeSong(local, remote, null);
+          result.conflicts += merged.conflicts;
+
+          if (!sameSongContent(merged.song, remote)) {
+            await putSongLocalOnly(merged.song);
+            await cloudUpsertSong(merged.song);
+            result.uploaded += 1;
+          }
         }
+
         cloudSongs = await fetchCloudSongs();
         await replaceLocalSongs(cloudSongs);
+        result.downloaded += cloudSongs.length;
       }
 
+      replaceBaselines(cloudSongs);
       localStorage.setItem(CLOUD_INITIALIZED_KEY, "1");
     } else {
-      // 通常同期。クラウド側の削除も尊重するため dirty flag を利用。
-      const dirty = getDirtyIds();
+      // 1) Handle local deletions first. If the cloud row was edited after the local
+      // deletion timestamp, the newer cloud edit wins and the row is restored.
+      let cloudMap = new Map(cloudSongs.map(song => [song.id, song]));
       const tombstones = getTombstones();
 
-      // 自端末で未同期の削除を先に反映。
-      for (const id of Object.keys(tombstones)) {
-        await cloudDeleteSong(id);
-      }
+      for (const [id, deletedAt] of Object.entries(tombstones)) {
+        const remote = cloudMap.get(id);
 
-      cloudSongs = await fetchCloudSongs();
-      const latestLocal = await getAllSongs();
-      const localMap = new Map(latestLocal.map(song => [song.id, song]));
-      const cloudMap = new Map(cloudSongs.map(song => [song.id, song]));
+        if (!remote) {
+          clearTombstone(id);
+          clearDirty(id);
+          removeBaseline(id);
+          continue;
+        }
 
-      // Local -> cloud for unsynced edits/new songs.
-      for (const id of dirty) {
-        const local = localMap.get(id);
-        if (local) await cloudUpsertSong(local);
-      }
+        const remoteTime = new Date(remote.updatedAt || 0).getTime();
+        const deleteTime = new Date(deletedAt || 0).getTime();
 
-      cloudSongs = await fetchCloudSongs();
-
-      const reconciledAgain = await reconcileNaturalKeyDuplicates(await getAllSongs(), cloudSongs);
-      if (reconciledAgain) cloudSongs = await fetchCloudSongs();
-
-      const refreshedCloudMap = new Map(cloudSongs.map(song => [song.id, song]));
-
-      // Cloud is authoritative for records not marked dirty.
-      for (const local of latestLocal) {
-        if (getDirtyIds().has(local.id)) continue;
-        if (!refreshedCloudMap.has(local.id)) {
-          await removeSongLocalOnly(local.id);
+        if (remoteTime > deleteTime) {
+          await putSongLocalOnly(remote);
+          clearTombstone(id);
+          clearDirty(id);
+          setBaseline(remote);
+          result.downloaded += 1;
+          result.conflicts += 1;
+        } else {
+          await cloudDeleteSong(id);
+          result.deletedUp += 1;
         }
       }
 
-      // Download cloud rows, but don't overwrite a still-dirty local row.
+      cloudSongs = await fetchCloudSongs();
+      cloudMap = new Map(cloudSongs.map(song => [song.id, song]));
+      let latestLocal = await getAllSongs();
+      let localMap = new Map(latestLocal.map(song => [song.id, song]));
+      const dirtyIds = [...getDirtyIds()];
+
+      // 2) Upload local edits with a three-way merge against the last successful
+      // cloud baseline. This preserves independent edits made on different devices.
+      for (const id of dirtyIds) {
+        const local = localMap.get(id);
+        if (!local) {
+          clearDirty(id);
+          continue;
+        }
+
+        const remote = cloudMap.get(id);
+        const baseline = getBaseline(id);
+
+        if (!remote) {
+          if (baseline) {
+            // The song existed at the previous sync but is now absent from cloud:
+            // another device deleted it. Deletion wins to prevent accidental resurrection.
+            await removeSongLocalOnly(id);
+            clearDirty(id);
+            removeBaseline(id);
+            result.deletedDown += 1;
+            result.conflicts += 1;
+          } else {
+            // No baseline means this is a genuinely new local song.
+            await cloudUpsertSong(local);
+            result.uploaded += 1;
+          }
+          continue;
+        }
+
+        const merged = threeWayMergeSong(local, remote, baseline);
+        result.conflicts += merged.conflicts;
+
+        if (!sameSongContent(merged.song, local)) {
+          await putSongLocalOnly(merged.song);
+          result.downloaded += 1;
+        }
+
+        if (!sameSongContent(merged.song, remote)) {
+          await cloudUpsertSong(merged.song);
+          result.uploaded += 1;
+        } else {
+          clearDirty(id);
+        }
+      }
+
+      // 3) Re-read cloud after uploads and natural-key reconciliation.
+      cloudSongs = await fetchCloudSongs();
+      const reconciledAgain = await reconcileNaturalKeyDuplicates(await getAllSongs(), cloudSongs);
+      if (reconciledAgain) {
+        result.conflicts += 1;
+        cloudSongs = await fetchCloudSongs();
+      }
+
+      const refreshedCloudMap = new Map(cloudSongs.map(song => [song.id, song]));
+      latestLocal = await getAllSongs();
+      localMap = new Map(latestLocal.map(song => [song.id, song]));
+
+      // 4) Respect deletions made on another device. A local song with a baseline
+      // but no cloud row has been deleted remotely. If it is not dirty, remove it.
+      for (const local of latestLocal) {
+        if (getDirtyIds().has(local.id)) continue;
+        if (!refreshedCloudMap.has(local.id) && getBaseline(local.id)) {
+          await removeSongLocalOnly(local.id);
+          removeBaseline(local.id);
+          result.deletedDown += 1;
+        }
+      }
+
+      // 5) Download new or newer cloud rows.
+      latestLocal = await getAllSongs();
+      localMap = new Map(latestLocal.map(song => [song.id, song]));
+
       for (const remote of cloudSongs) {
         if (getDirtyIds().has(remote.id)) continue;
         const current = localMap.get(remote.id);
+
         if (!current) {
           await putSongLocalOnly(remote);
+          result.downloaded += 1;
           continue;
         }
-        const localTime = new Date(current.updatedAt || 0).getTime();
-        const remoteTime = new Date(remote.updatedAt || 0).getTime();
-        if (remoteTime >= localTime) await putSongLocalOnly(remote);
+
+        if (!sameSongContent(current, remote)) {
+          await putSongLocalOnly(remote);
+          result.downloaded += 1;
+        }
       }
 
+      // The cloud state after a successful sync becomes the new three-way merge baseline.
+      replaceBaselines(cloudSongs);
       songs = await getAllSongs();
       render();
     }
 
     const now = new Date().toISOString();
+    result.at = now;
     localStorage.setItem(CLOUD_LAST_SYNC_KEY, now);
+    saveSyncResult(result);
     updateCloudUI("synced");
 
     if (!silent) {
-      setCloudMessage("同期が完了しました。");
+      const conflictNote = result.conflicts
+        ? ` 競合${result.conflicts}件は安全ルールで統合しました。`
+        : "";
+      setCloudMessage(`同期完了：${formatSyncResult(result)}。${conflictNote}`.trim());
     }
+
     return true;
   } catch (error) {
     console.error("Cloud sync failed:", error);
@@ -805,6 +1115,9 @@ function updateCloudUI(state = null) {
 
     const last = localStorage.getItem(CLOUD_LAST_SYNC_KEY);
     els.cloudLastSync.textContent = last ? formatDateTime(last) : "まだ";
+    if (els.cloudLastResult) {
+      els.cloudLastResult.textContent = formatSyncResult(loadSyncResult());
+    }
   } else {
     els.cloudBtnText.textContent = "クラウド";
     els.cloudBtn.classList.remove("cloud-connected");
@@ -840,6 +1153,8 @@ async function logoutCloud() {
   }
   saveCloudAuth(null);
   localStorage.removeItem(CLOUD_INITIALIZED_KEY);
+  localStorage.removeItem(CLOUD_BASELINE_KEY);
+  localStorage.removeItem(CLOUD_LAST_RESULT_KEY);
   setCloudMessage("");
 }
 
@@ -886,15 +1201,7 @@ async function putSong(song) {
 
   markDirty(song.id);
   updateCloudUI();
-
-  if (cloudAuth?.user?.id && navigator.onLine) {
-    try {
-      await cloudUpsertSong(song);
-      updateCloudUI();
-    } catch (error) {
-      console.warn("Cloud upsert pending:", error);
-    }
-  }
+  scheduleCloudSync("local-edit", 350);
 }
 
 async function removeSong(id) {
@@ -905,15 +1212,7 @@ async function removeSong(id) {
   addTombstone(id);
   clearDirty(id);
   updateCloudUI();
-
-  if (cloudAuth?.user?.id && navigator.onLine) {
-    try {
-      await cloudDeleteSong(id);
-      updateCloudUI();
-    } catch (error) {
-      console.warn("Cloud delete pending:", error);
-    }
-  }
+  scheduleCloudSync("local-delete", 350);
 }
 
 function makeId() {
@@ -2257,10 +2556,42 @@ async function deleteTag(tagName) {
   renderQuickTagButtons();
 }
 
+function relativeBackupAge(iso) {
+  if (!iso) return "まだありません";
+  const time = new Date(iso).getTime();
+  if (!Number.isFinite(time)) return "不明";
+
+  const diffMs = Math.max(0, Date.now() - time);
+  const days = Math.floor(diffMs / 86400000);
+  if (days === 0) return "今日";
+  if (days === 1) return "1日前";
+  return `${days}日前`;
+}
+
+function updateBackupStatus() {
+  if (!els.backupStatus) return;
+  const last = localStorage.getItem(BACKUP_LAST_AT_KEY);
+  const age = relativeBackupAge(last);
+  const days = last ? Math.floor(Math.max(0, Date.now() - new Date(last).getTime()) / 86400000) : null;
+
+  if (!last) {
+    els.backupStatus.textContent = "⚠ 最終バックアップ：まだありません";
+    els.backupStatus.classList.add("backup-warning");
+    return;
+  }
+
+  els.backupStatus.textContent = `最終バックアップ：${formatDateTime(last)}（${age}）`;
+  els.backupStatus.classList.toggle("backup-warning", days >= 30);
+  if (days >= 30) {
+    els.backupStatus.textContent += " ⚠ そろそろJSONバックアップ推奨";
+  }
+}
+
+
 function exportJSON() {
   const data = {
     app: "Karaoke Manager",
-    version: 15,
+    version: 16,
     exportedAt: new Date().toISOString(),
     songs,
     settings: {
@@ -2280,6 +2611,8 @@ function exportJSON() {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+  localStorage.setItem(BACKUP_LAST_AT_KEY, new Date().toISOString());
+  updateBackupStatus();
 }
 
 async function importJSON(file) {
@@ -2479,6 +2812,27 @@ async function importCSV(file) {
 }
 
 
+function scheduleCloudSync(reason = "local-change", delay = 350) {
+  if (!cloudAuth?.user?.id || !navigator.onLine) return;
+
+  if (cloudSyncTimer) clearTimeout(cloudSyncTimer);
+  cloudSyncTimer = setTimeout(() => {
+    cloudSyncTimer = null;
+    syncCloud({ silent: true, reason });
+  }, delay);
+}
+
+
+function requestAutoSync(reason = "resume") {
+  if (!cloudAuth?.user?.id || !navigator.onLine || cloudSyncInProgress) return;
+
+  const now = Date.now();
+  if (now - lastAutoSyncAttempt < AUTO_SYNC_MIN_INTERVAL_MS) return;
+  lastAutoSyncAttempt = now;
+  syncCloud({ silent: true, reason });
+}
+
+
 function resetSearchAndFilters() {
   els.searchInput.value = "";
   currentFilter = "all";
@@ -2524,7 +2878,7 @@ function bindEvents() {
       els.cloudPasswordInput.value = "";
       setCloudMessage("ログインしました。初回同期を開始します…");
       updateCloudUI("syncing");
-      await syncCloud({ silent: true });
+      await syncCloud({ silent: true, reason: "login" });
       setCloudMessage("クラウド同期の準備ができました。");
     } catch (error) {
       els.cloudLoginError.textContent = readableCloudError(error);
@@ -2542,15 +2896,20 @@ function bindEvents() {
     }
   });
 
-  els.cloudSyncNowBtn.addEventListener("click", () => syncCloud());
+  els.cloudSyncNowBtn.addEventListener("click", () => syncCloud({ reason: "manual" }));
   els.cloudLogoutBtn.addEventListener("click", async () => {
     if (!confirm("クラウドからログアウトしますか？\n端末内の曲データは削除されません。")) return;
     await logoutCloud();
   });
 
-  window.addEventListener("online", () => {
-    if (cloudAuth?.user?.id) syncCloud({ silent: true });
+  window.addEventListener("online", () => requestAutoSync("online"));
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") requestAutoSync("visible");
   });
+
+  window.addEventListener("focus", () => requestAutoSync("focus"));
+  window.addEventListener("pageshow", () => requestAutoSync("pageshow"));
 
   els.closeDialogBtn.addEventListener("click", () => els.songDialog.close());
   els.cancelBtn.addEventListener("click", () => els.songDialog.close());
@@ -2751,12 +3110,13 @@ async function init() {
 
   loadCloudAuth();
   updateCloudUI();
+  updateBackupStatus();
   render();
 
   if (cloudAuth?.access_token) {
     const valid = await validateCloudSession();
     if (valid && navigator.onLine) {
-      syncCloud({ silent: true });
+      syncCloud({ silent: true, reason: "startup" });
     }
   }
 

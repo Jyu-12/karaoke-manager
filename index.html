@@ -18,7 +18,7 @@
     <div>
       <div class="brand-row">
         <p class="eyebrow">KARAOKE MANAGER</p>
-        <span id="appVersion" class="version-badge">v15</span>
+        <span id="appVersion" class="version-badge">v16</span>
         <button id="checkUpdateBtn" class="update-check-btn" type="button" title="最新版を確認">↻ 更新確認</button>
       </div>
       <h1>曲管理</h1>
@@ -142,6 +142,7 @@
       <div>
         <h2>バックアップ</h2>
         <p>端末内の曲データをJSONとして保存・復元できます。</p>
+        <p id="backupStatus" class="backup-status">最終バックアップ：まだありません</p>
       </div>
       <div class="backup-actions">
         <button id="exportBtn" class="ghost-btn">JSONを書き出す</button>
@@ -202,6 +203,10 @@
           <div>
             <span>最終同期</span>
             <strong id="cloudLastSync">—</strong>
+          </div>
+          <div>
+            <span>前回の同期結果</span>
+            <strong id="cloudLastResult">—</strong>
           </div>
         </div>
 

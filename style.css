@@ -256,8 +256,7 @@ select, input[type="text"], textarea {
 }
 
 .key-badge:empty,
-.confidence-badge:empty,
-.memo-preview:empty { display: none; }
+.confidence-badge:empty { display: none; }
 
 .meta-row {
   display: flex;
@@ -266,14 +265,6 @@ select, input[type="text"], textarea {
   min-width: 0;
 }
 
-.memo-preview {
-  min-width: 0;
-  color: var(--muted);
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 .empty-state {
   padding: 44px 20px;
@@ -944,24 +935,6 @@ dialog::backdrop {
   font-size: 11px;
 }
 
-.detail-memo {
-  display: grid;
-  gap: 6px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 13px;
-}
-
-.detail-memo > span {
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.detail-memo p {
-  margin: 0;
-  white-space: pre-wrap;
-  line-height: 1.65;
-}
 
 .stats-overview {
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1590,6 +1563,122 @@ html[data-theme="light"] .filter-chip.active {
 
 @media (max-width: 760px) {
   .cloud-sync-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* v19: multi-select / bulk editing */
+.bulk-selection-bar {
+  position: sticky;
+  top: 78px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 30px rgba(0,0,0,.10);
+}
+
+.bulk-selection-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+#multiSelectBtn.active {
+  border-color: var(--text);
+  color: var(--text);
+}
+
+.select-song-btn {
+  width: 52px;
+  flex: 0 0 52px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: transparent;
+  font-size: 19px;
+  font-weight: 900;
+}
+
+.select-song-btn:not(.selected) {
+  color: transparent;
+}
+
+.select-song-btn:not(.selected)::after {
+  content: "";
+  display: inline-block;
+  width: 19px;
+  height: 19px;
+  border: 2px solid var(--muted);
+  border-radius: 6px;
+  vertical-align: middle;
+}
+
+.select-song-btn.selected {
+  color: var(--accent-text);
+  background: var(--accent);
+}
+
+.song-card.selection-active .favorite-btn {
+  display: none;
+}
+
+.song-card.selected {
+  border-color: var(--text);
+  box-shadow: 0 0 0 1px var(--text) inset;
+}
+
+.bulk-edit-card {
+  display: grid;
+  gap: 15px;
+  width: min(92vw, 620px);
+  padding: 20px;
+}
+
+.bulk-edit-card > label,
+.bulk-state-grid label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.bulk-state-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.bulk-state-grid select {
+  width: 100%;
+}
+
+@media (max-width: 700px) {
+  .bulk-selection-bar {
+    top: 68px;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .bulk-selection-actions {
+    justify-content: stretch;
+  }
+
+  .bulk-selection-actions > button {
+    flex: 1 1 auto;
+  }
+
+  .bulk-state-grid {
     grid-template-columns: 1fr;
   }
 }

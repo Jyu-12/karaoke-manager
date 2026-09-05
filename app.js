@@ -1,4 +1,4 @@
-const APP_VERSION = "v17";
+const APP_VERSION = "v19";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -9,6 +9,8 @@ let currentFilter = "all";
 let formMode = "add"; // add / edit / continuous / duplicate
 let pendingDamScores = [];
 let pendingJoysoundScores = [];
+let selectionMode = false;
+const selectedSongIds = new Set();
 
 const QUICK_TAGS_KEY = "karaokeManagerQuickTagsV1";
 const THEME_KEY = "karaokeManagerThemeV1";
@@ -73,6 +75,27 @@ const els = {
   cloudSyncMessage: document.querySelector("#cloudSyncMessage"),
   cloudSyncNowBtn: document.querySelector("#cloudSyncNowBtn"),
   cloudLogoutBtn: document.querySelector("#cloudLogoutBtn"),
+  multiSelectBtn: document.querySelector("#multiSelectBtn"),
+  bulkSelectionBar: document.querySelector("#bulkSelectionBar"),
+  bulkSelectedCount: document.querySelector("#bulkSelectedCount"),
+  selectVisibleBtn: document.querySelector("#selectVisibleBtn"),
+  clearSelectionBtn: document.querySelector("#clearSelectionBtn"),
+  openBulkEditBtn: document.querySelector("#openBulkEditBtn"),
+  exitSelectionBtn: document.querySelector("#exitSelectionBtn"),
+
+  bulkEditDialog: document.querySelector("#bulkEditDialog"),
+  bulkEditForm: document.querySelector("#bulkEditForm"),
+  bulkEditCount: document.querySelector("#bulkEditCount"),
+  bulkAddTagsInput: document.querySelector("#bulkAddTagsInput"),
+  bulkRemoveTagsInput: document.querySelector("#bulkRemoveTagsInput"),
+  bulkFavoriteSelect: document.querySelector("#bulkFavoriteSelect"),
+  bulkStapleSelect: document.querySelector("#bulkStapleSelect"),
+  bulkPracticeSelect: document.querySelector("#bulkPracticeSelect"),
+  bulkEditMessage: document.querySelector("#bulkEditMessage"),
+  bulkDeleteBtn: document.querySelector("#bulkDeleteBtn"),
+  closeBulkEditBtn: document.querySelector("#closeBulkEditBtn"),
+  cancelBulkEditBtn: document.querySelector("#cancelBulkEditBtn"),
+
   manageTagsBtn: document.querySelector("#manageTagsBtn"),
   statsBtn: document.querySelector("#statsBtn"),
   sessionHistoryBtn: document.querySelector("#sessionHistoryBtn"),
@@ -97,7 +120,6 @@ const els = {
   stapleInput: document.querySelector("#stapleInput"),
   practiceInput: document.querySelector("#practiceInput"),
   tagsInput: document.querySelector("#tagsInput"),
-  memoInput: document.querySelector("#memoInput"),
   deleteSongBtn: document.querySelector("#deleteSongBtn"),
   duplicateSongBtn: document.querySelector("#duplicateSongBtn"),
   saveSongBtn: document.querySelector("#saveSongBtn"),
@@ -148,7 +170,6 @@ const els = {
   detailJoyAvg: document.querySelector("#detailJoyAvg"),
   detailJoyBest: document.querySelector("#detailJoyBest"),
   detailJoyHistory: document.querySelector("#detailJoyHistory"),
-  detailMemo: document.querySelector("#detailMemo"),
   detailEditBtn: document.querySelector("#detailEditBtn"),
 
   sessionHistoryDialog: document.querySelector("#sessionHistoryDialog"),
@@ -1697,7 +1718,6 @@ function getVisibleSongs() {
     return [
       song.title,
       song.artist,
-      song.memo,
       songTags.join(" "),
       formatKey(song.key),
       song.confidence,
@@ -1771,11 +1791,166 @@ function getVisibleSongs() {
   return result;
 }
 
+
+function pruneSelectedSongIds() {
+  const existingIds = new Set(songs.map(song => song.id));
+  for (const id of [...selectedSongIds]) {
+    if (!existingIds.has(id)) selectedSongIds.delete(id);
+  }
+}
+
+function updateBulkSelectionUI() {
+  pruneSelectedSongIds();
+
+  els.bulkSelectionBar.classList.toggle("hidden", !selectionMode);
+  els.multiSelectBtn.classList.toggle("active", selectionMode);
+  els.multiSelectBtn.textContent = selectionMode ? "☑ 選択中" : "☑ 複数選択";
+
+  const count = selectedSongIds.size;
+  els.bulkSelectedCount.textContent = `${count}曲選択`;
+  els.openBulkEditBtn.disabled = count === 0;
+  els.clearSelectionBtn.disabled = count === 0;
+}
+
+function setSelectionMode(enabled) {
+  selectionMode = !!enabled;
+  if (!selectionMode) selectedSongIds.clear();
+  render();
+}
+
+function toggleSongSelection(id) {
+  if (!selectionMode) return;
+
+  if (selectedSongIds.has(id)) {
+    selectedSongIds.delete(id);
+  } else {
+    selectedSongIds.add(id);
+  }
+
+  render();
+}
+
+function selectAllVisibleSongs() {
+  if (!selectionMode) return;
+  for (const song of getVisibleSongs()) selectedSongIds.add(song.id);
+  render();
+}
+
+function clearSongSelection() {
+  selectedSongIds.clear();
+  render();
+}
+
+function resetBulkEditForm() {
+  els.bulkAddTagsInput.value = "";
+  els.bulkRemoveTagsInput.value = "";
+  els.bulkFavoriteSelect.value = "";
+  els.bulkStapleSelect.value = "";
+  els.bulkPracticeSelect.value = "";
+  els.bulkEditMessage.textContent = "";
+}
+
+function openBulkEditDialog() {
+  pruneSelectedSongIds();
+
+  if (!selectedSongIds.size) {
+    alert("一括編集する曲を選択してください。");
+    return;
+  }
+
+  resetBulkEditForm();
+  els.bulkEditCount.textContent = `${selectedSongIds.size}曲を選択中`;
+  els.bulkEditDialog.showModal();
+  setTimeout(() => els.bulkAddTagsInput.focus(), 0);
+}
+
+function applyBulkBoolean(current, setting) {
+  if (setting === "on") return true;
+  if (setting === "off") return false;
+  return current;
+}
+
+async function applyBulkEdit() {
+  const addTags = parseTags(els.bulkAddTagsInput.value);
+  const removeTags = parseTags(els.bulkRemoveTagsInput.value);
+  const removeKeys = new Set(removeTags.map(normalizeText));
+
+  const favoriteSetting = els.bulkFavoriteSelect.value;
+  const stapleSetting = els.bulkStapleSelect.value;
+  const practiceSetting = els.bulkPracticeSelect.value;
+
+  const hasChanges =
+    addTags.length ||
+    removeTags.length ||
+    favoriteSetting ||
+    stapleSetting ||
+    practiceSetting;
+
+  if (!hasChanges) {
+    els.bulkEditMessage.textContent = "変更内容を1つ以上指定してください。";
+    return;
+  }
+
+  const selected = songs.filter(song => selectedSongIds.has(song.id));
+  const updatedAt = new Date().toISOString();
+
+  for (const song of selected) {
+    let tags = parseTags(song.tags);
+
+    if (removeKeys.size) {
+      tags = tags.filter(tag => !removeKeys.has(normalizeText(tag)));
+    }
+
+    if (addTags.length) {
+      tags = parseTags([...tags, ...addTags]);
+    }
+
+    const updatedSong = {
+      ...song,
+      tags,
+      favorite: applyBulkBoolean(song.favorite, favoriteSetting),
+      staple: applyBulkBoolean(song.staple, stapleSetting),
+      practice: applyBulkBoolean(song.practice, practiceSetting),
+      updatedAt
+    };
+
+    await putSong(updatedSong);
+  }
+
+  songs = await getAllSongs();
+  els.bulkEditDialog.close();
+  selectedSongIds.clear();
+  selectionMode = false;
+  render();
+}
+
+async function deleteSelectedSongs() {
+  pruneSelectedSongIds();
+  const count = selectedSongIds.size;
+  if (!count) return;
+
+  if (!confirm(`選択した${count}曲を削除しますか？\nこの操作は選択中の曲そのものを削除します。`)) {
+    return;
+  }
+
+  for (const id of [...selectedSongIds]) {
+    await removeSong(id);
+  }
+
+  songs = await getAllSongs();
+  els.bulkEditDialog.close();
+  selectedSongIds.clear();
+  selectionMode = false;
+  render();
+}
+
 function render() {
   refreshFilters();
+  pruneSelectedSongIds();
   const visible = getVisibleSongs();
 
   els.songCount.textContent = songs.length.toLocaleString("ja-JP");
+  updateBulkSelectionUI();
   els.songList.innerHTML = "";
 
   if (!visible.length) {
@@ -1792,10 +1967,29 @@ function render() {
     const node = els.template.content.firstElementChild.cloneNode(true);
     node.dataset.id = song.id;
 
+    const selected = selectedSongIds.has(song.id);
+    node.classList.toggle("selection-active", selectionMode);
+    node.classList.toggle("selected", selected);
+
+    const selectBtn = node.querySelector(".select-song-btn");
+    selectBtn.classList.toggle("hidden", !selectionMode);
+    selectBtn.classList.toggle("selected", selected);
+    selectBtn.setAttribute("aria-pressed", selected ? "true" : "false");
+    selectBtn.addEventListener("click", event => {
+      event.stopPropagation();
+      toggleSongSelection(song.id);
+    });
+
     const fav = node.querySelector(".favorite-btn");
     fav.textContent = song.favorite ? "★" : "☆";
     fav.addEventListener("click", async event => {
       event.stopPropagation();
+
+      if (selectionMode) {
+        toggleSongSelection(song.id);
+        return;
+      }
+
       song.favorite = !song.favorite;
       song.updatedAt = new Date().toISOString();
       await putSong(song);
@@ -1813,7 +2007,6 @@ function render() {
 
     node.querySelector(".play-count-badge").textContent = `歌唱 ${playCountOf(song)}回`;
     node.querySelector(".missed-badge").textContent = missedLabel(song);
-    node.querySelector(".memo-preview").textContent = song.memo || "";
 
     const tagRow = node.querySelector(".tag-row");
     for (const tag of parseTags(song.tags)) {
@@ -1823,13 +2016,25 @@ function render() {
       chip.title = `タグ「${tag}」で絞り込み`;
       chip.addEventListener("click", event => {
         event.stopPropagation();
+
+        if (selectionMode) {
+          toggleSongSelection(song.id);
+          return;
+        }
+
         els.tagFilterSelect.value = tag;
         render();
       });
       tagRow.append(chip);
     }
 
-    node.querySelector(".song-main").addEventListener("click", () => openSongDetail(song.id));
+    node.querySelector(".song-main").addEventListener("click", () => {
+      if (selectionMode) {
+        toggleSongSelection(song.id);
+      } else {
+        openSongDetail(song.id);
+      }
+    });
 
     els.songList.append(node);
   }
@@ -1937,7 +2142,6 @@ function openSongDetail(id) {
   els.detailJoyCount.textContent = `${joy.count}回`;
   els.detailJoyAvg.textContent = formatStatScore(joy.average);
   els.detailJoyBest.textContent = formatStatScore(joy.best);
-  els.detailMemo.textContent = song.memo || "メモなし";
 
   renderDetailHistory(els.detailDamHistory, damScoresOf(song));
   renderDetailHistory(els.detailJoyHistory, joysoundScoresOf(song));
@@ -2235,8 +2439,7 @@ function songFormEnterOrder() {
     els.favoriteInput,
     els.stapleInput,
     els.practiceInput,
-    els.tagsInput,
-    els.memoInput
+    els.tagsInput
   ];
 
   if (formMode === "continuous" && !els.continuousKeepArtistRow.classList.contains("hidden")) {
@@ -2338,7 +2541,6 @@ function openEditDialog(id) {
   els.stapleInput.checked = !!song.staple;
   els.practiceInput.checked = !!song.practice;
   els.tagsInput.value = parseTags(song.tags).join(", ");
-  els.memoInput.value = song.memo || "";
   pendingDamScores = damScoresOf(song);
   pendingJoysoundScores = joysoundScoresOf(song);
   renderScoreHistory();
@@ -2363,7 +2565,6 @@ function duplicateCurrentSong() {
   els.stapleInput.checked = !!source.staple;
   els.practiceInput.checked = !!source.practice;
   els.tagsInput.value = parseTags(source.tags).join(", ");
-  els.memoInput.value = source.memo || "";
   pendingDamScores = [];
   pendingJoysoundScores = [];
   els.formError.textContent = "キーなどを変更して保存してください。点数履歴は複製されません。";
@@ -2387,7 +2588,7 @@ async function saveForm() {
     staple: els.stapleInput.checked,
     practice: els.practiceInput.checked,
     tags: parseTags(els.tagsInput.value),
-    memo: els.memoInput.value.trim(),
+    memo: existing?.memo || "",
     damScores: normalizeScoreEntries(pendingDamScores),
     joysoundScores: normalizeScoreEntries(pendingJoysoundScores),
     createdAt: existing?.createdAt || now,
@@ -2650,7 +2851,7 @@ function updateBackupStatus() {
 function exportJSON() {
   const data = {
     app: "Karaoke Manager",
-    version: 17,
+    version: 19,
     exportedAt: new Date().toISOString(),
     songs,
     settings: {
@@ -2913,6 +3114,20 @@ function bindEvents() {
   els.continuousAddBtn.addEventListener("click", openContinuousAddDialog);
   els.themeSelect.addEventListener("change", () => applyTheme(els.themeSelect.value));
 
+  els.multiSelectBtn.addEventListener("click", () => setSelectionMode(!selectionMode));
+  els.selectVisibleBtn.addEventListener("click", selectAllVisibleSongs);
+  els.clearSelectionBtn.addEventListener("click", clearSongSelection);
+  els.openBulkEditBtn.addEventListener("click", openBulkEditDialog);
+  els.exitSelectionBtn.addEventListener("click", () => setSelectionMode(false));
+
+  els.closeBulkEditBtn.addEventListener("click", () => els.bulkEditDialog.close());
+  els.cancelBulkEditBtn.addEventListener("click", () => els.bulkEditDialog.close());
+  els.bulkDeleteBtn.addEventListener("click", deleteSelectedSongs);
+  els.bulkEditForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    await applyBulkEdit();
+  });
+
   els.cloudBtn.addEventListener("click", openCloudDialog);
   els.checkUpdateBtn?.addEventListener("click", () => {
     checkForAppUpdate({ manual: true });
@@ -3128,7 +3343,7 @@ function bindEvents() {
   });
 
   document.addEventListener("keydown", event => {
-    if (event.key === "Insert" && !els.songDialog.open && !els.randomDialog.open) {
+    if (event.key === "Insert" && !selectionMode && !els.songDialog.open && !els.randomDialog.open && !els.bulkEditDialog.open) {
       event.preventDefault();
       openAddDialog();
     }
@@ -3137,6 +3352,11 @@ function bindEvents() {
       event.preventDefault();
       els.searchInput.focus();
       els.searchInput.select();
+    }
+
+    if (event.key === "Escape" && els.bulkEditDialog.open) {
+      els.bulkEditDialog.close();
+      return;
     }
 
     if (event.key === "Escape" && els.cloudDialog.open) {

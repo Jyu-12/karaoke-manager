@@ -1,4 +1,4 @@
-const CACHE_NAME = "karaoke-manager-v20-fast-scoring";
+const CACHE_NAME = "karaoke-manager-v21-tag-colors-cleanup";
 
 const CORE_ASSETS = [
   "./",

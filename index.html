@@ -18,7 +18,7 @@
     <div>
       <div class="brand-row">
         <p class="eyebrow">KARAOKE MANAGER</p>
-        <span id="appVersion" class="version-badge">v20</span>
+        <span id="appVersion" class="version-badge">v21</span>
         <button id="checkUpdateBtn" class="update-check-btn" type="button" title="最新版を確認">↻ 更新確認</button>
       </div>
       <h1>曲管理</h1>
@@ -592,7 +592,13 @@
         </div>
         <button type="button" id="closeTagManagerBtn" class="icon-btn" aria-label="閉じる">✕</button>
       </div>
-      <p class="manager-note">タグ名の変更・削除は、そのタグが付いている全曲に反映されます。</p>
+      <p class="manager-note">タグ名の変更・削除は、そのタグが付いている全曲に反映されます。タグの色は名前から自動で決まり、PC・スマホで同じ色になります。</p>
+
+      <div class="tag-manager-tools">
+        <span id="unusedTagCount" class="manager-note">未使用タグ 0件</span>
+        <button type="button" id="cleanupUnusedTagsBtn" class="ghost-btn small-btn">未使用タグを整理</button>
+      </div>
+
       <div id="tagManagerList" class="tag-manager-list"></div>
       <div class="dialog-actions">
         <span class="spacer"></span>

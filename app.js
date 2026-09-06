@@ -1,4 +1,4 @@
-const APP_VERSION = "v20";
+const APP_VERSION = "v21";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -177,6 +177,8 @@ const els = {
 
   tagManagerDialog: document.querySelector("#tagManagerDialog"),
   tagManagerList: document.querySelector("#tagManagerList"),
+  unusedTagCount: document.querySelector("#unusedTagCount"),
+  cleanupUnusedTagsBtn: document.querySelector("#cleanupUnusedTagsBtn"),
   closeTagManagerBtn: document.querySelector("#closeTagManagerBtn"),
   tagManagerDoneBtn: document.querySelector("#tagManagerDoneBtn"),
 
@@ -1269,6 +1271,32 @@ function makeId() {
 
 function normalizeText(value) {
   return String(value ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase("ja");
+}
+
+
+const TAG_COLOR_COUNT = 10;
+
+function tagColorIndex(tag) {
+  const text = normalizeText(tag);
+  let hash = 2166136261;
+
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return Math.abs(hash >>> 0) % TAG_COLOR_COUNT;
+}
+
+function applyTagColor(element, tag) {
+  if (!element) return element;
+
+  for (let i = 0; i < TAG_COLOR_COUNT; i++) {
+    element.classList.remove(`tag-color-${i}`);
+  }
+
+  element.classList.add("tag-colored", `tag-color-${tagColorIndex(tag)}`);
+  return element;
 }
 
 function parseTags(value) {
@@ -2460,6 +2488,7 @@ function render() {
       const chip = document.createElement("span");
       chip.className = "tag-chip";
       chip.textContent = tag;
+      applyTagColor(chip, tag);
       chip.title = `タグ「${tag}」で絞り込み`;
       chip.addEventListener("click", event => {
         event.stopPropagation();
@@ -2575,6 +2604,7 @@ function openSongDetail(id) {
     const chip = document.createElement("span");
     chip.className = "tag-chip";
     chip.textContent = tag;
+    applyTagColor(chip, tag);
     els.detailTags.append(chip);
   }
 
@@ -2843,6 +2873,7 @@ function renderQuickTagButtons() {
     button.type = "button";
     button.className = "quick-tag-btn";
     button.textContent = tag;
+    applyTagColor(button, tag);
     button.classList.toggle("selected", selected.has(normalizeText(tag)));
 
     button.addEventListener("click", () => {
@@ -3145,35 +3176,99 @@ function getTagUsage() {
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, "ja"));
 }
 
+function getTagManagerEntries() {
+  const map = new Map(
+    getTagUsage().map(entry => [
+      normalizeText(entry.name),
+      { ...entry, quick: false }
+    ])
+  );
+
+  for (const tag of getQuickTags()) {
+    const key = normalizeText(tag);
+    const existing = map.get(key);
+
+    if (existing) {
+      existing.quick = true;
+    } else {
+      map.set(key, { name: tag, count: 0, quick: true });
+    }
+  }
+
+  return [...map.values()].sort((a, b) => {
+    if ((a.count === 0) !== (b.count === 0)) {
+      return a.count === 0 ? -1 : 1;
+    }
+    return a.name.localeCompare(b.name, "ja");
+  });
+}
+
+function getUnusedQuickTags() {
+  const used = new Set(getTagUsage().map(entry => normalizeText(entry.name)));
+  return getQuickTags().filter(tag => !used.has(normalizeText(tag)));
+}
+
+async function cleanupUnusedTags() {
+  const unused = getUnusedQuickTags();
+
+  if (!unused.length) {
+    alert("未使用タグはありません。");
+    return;
+  }
+
+  const preview = unused.slice(0, 8).join("、");
+  const suffix = unused.length > 8 ? ` ほか${unused.length - 8}件` : "";
+
+  if (!confirm(
+    `未使用タグ ${unused.length}件を「よく使うタグ」から削除しますか？\n\n${preview}${suffix}\n\n曲に付いているタグは削除されません。`
+  )) return;
+
+  const unusedKeys = new Set(unused.map(normalizeText));
+  const nextQuickTags = getQuickTags().filter(tag => !unusedKeys.has(normalizeText(tag)));
+  saveQuickTags(nextQuickTags);
+
+  renderQuickTagButtons();
+  renderTagManager();
+}
+
 function openTagManager() {
   renderTagManager();
   els.tagManagerDialog.showModal();
 }
 
 function renderTagManager() {
-  const usage = getTagUsage();
-  els.tagManagerList.innerHTML = "";
+  const entries = getTagManagerEntries();
+  const unused = getUnusedQuickTags();
 
-  if (!usage.length) {
+  els.tagManagerList.innerHTML = "";
+  els.unusedTagCount.textContent = `未使用タグ ${unused.length}件`;
+  els.cleanupUnusedTagsBtn.disabled = unused.length === 0;
+
+  if (!entries.length) {
     const empty = document.createElement("div");
     empty.className = "empty-state compact";
-    empty.textContent = "まだタグが使われていません。";
+    empty.textContent = "まだタグが登録されていません。";
     els.tagManagerList.append(empty);
     return;
   }
 
-  for (const entry of usage) {
+  for (const entry of entries) {
     const row = document.createElement("div");
     row.className = "tag-manager-row";
+    row.classList.toggle("unused", entry.count === 0);
 
     const info = document.createElement("div");
     info.className = "tag-manager-info";
 
-    const name = document.createElement("strong");
+    const name = document.createElement("span");
+    name.className = "tag-chip tag-manager-tag-preview";
     name.textContent = entry.name;
+    applyTagColor(name, entry.name);
 
     const count = document.createElement("span");
-    count.textContent = `${entry.count}曲`;
+    count.textContent = entry.count === 0
+      ? "未使用（よく使うタグ）"
+      : `${entry.count}曲${entry.quick ? " / よく使うタグ" : ""}`;
 
     info.append(name, count);
 
@@ -3298,7 +3393,7 @@ function updateBackupStatus() {
 function exportJSON() {
   const data = {
     app: "Karaoke Manager",
-    version: 20,
+    version: 21,
     exportedAt: new Date().toISOString(),
     songs,
     settings: {
@@ -3788,6 +3883,7 @@ function bindEvents() {
   });
 
   els.manageTagsBtn.addEventListener("click", openTagManager);
+  els.cleanupUnusedTagsBtn.addEventListener("click", cleanupUnusedTags);
   els.closeTagManagerBtn.addEventListener("click", () => els.tagManagerDialog.close());
   els.tagManagerDoneBtn.addEventListener("click", () => els.tagManagerDialog.close());
 

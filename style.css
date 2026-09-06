@@ -1682,3 +1682,314 @@ html[data-theme="light"] .filter-chip.active {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* v20: fast score entry mode */
+.fast-score-dialog {
+  width: min(720px, calc(100% - 20px));
+}
+
+.fast-score-card {
+  display: grid;
+  gap: 15px;
+  padding: 20px;
+}
+
+.fast-section-label {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .03em;
+}
+
+.fast-session-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel-2);
+}
+
+.fast-session-panel > div {
+  display: grid;
+  gap: 3px;
+}
+
+.fast-session-panel small,
+.fast-service-picker small,
+.fast-score-input-wrap small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.fast-service-lock {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.fast-service-picker {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.fast-service-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.fast-service-btn {
+  min-height: 50px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.fast-service-btn.selected {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.fast-song-search {
+  display: grid;
+  gap: 7px;
+}
+
+.fast-song-search input[type="search"],
+.fast-score-input-row input[type="number"] {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 13px;
+  background: var(--panel-2);
+  color: var(--text);
+  outline: none;
+}
+
+.fast-song-results {
+  display: grid;
+  gap: 6px;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.fast-result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+  color: var(--text);
+  text-align: left;
+}
+
+.fast-result-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fast-result-main strong,
+.fast-result-main span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fast-result-main span,
+.fast-result-meta,
+.fast-result-empty {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.fast-result-empty {
+  padding: 10px 2px;
+}
+
+.fast-selected-song {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel-2);
+}
+
+.fast-selected-song > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.fast-selected-song strong,
+.fast-selected-song #fastSelectedArtist {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fast-selected-song #fastSelectedArtist {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.fast-score-input-wrap {
+  display: grid;
+  gap: 7px;
+}
+
+.fast-score-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.fast-score-input-row input[type="number"] {
+  min-width: 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.fast-score-message {
+  margin-top: -6px;
+}
+
+.fast-recent-section {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.fast-recent-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fast-recent-head > div {
+  display: grid;
+  gap: 2px;
+}
+
+.fast-recent-head small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.fast-recent-list {
+  display: grid;
+  gap: 7px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.fast-recent-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+}
+
+.fast-recent-info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fast-recent-info strong,
+.fast-recent-info span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fast-recent-info span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.fast-recent-score {
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.fast-recent-actions {
+  display: flex;
+  gap: 5px;
+}
+
+.fast-recent-empty {
+  padding: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .fast-score-dialog {
+    width: calc(100% - 12px);
+    max-height: calc(100dvh - 12px);
+  }
+
+  .fast-score-card {
+    padding: 15px;
+  }
+
+  .fast-session-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .fast-service-lock {
+    align-self: flex-start;
+  }
+
+  .fast-score-input-row {
+    grid-template-columns: 1fr;
+  }
+
+  .fast-score-input-row .primary-btn {
+    width: 100%;
+  }
+
+  .fast-recent-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .fast-recent-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+}

@@ -18,7 +18,7 @@
     <div>
       <div class="brand-row">
         <p class="eyebrow">KARAOKE MANAGER</p>
-        <span id="appVersion" class="version-badge">v19</span>
+        <span id="appVersion" class="version-badge">v20</span>
         <button id="checkUpdateBtn" class="update-check-btn" type="button" title="最新版を確認">↻ 更新確認</button>
       </div>
       <h1>曲管理</h1>
@@ -47,6 +47,7 @@
         <strong id="songCount">0</strong>
       </div>
       <div class="summary-actions">
+        <button id="fastScoreBtn" class="primary-btn">🎤 採点入力</button>
         <button id="multiSelectBtn" class="ghost-btn">☑ 複数選択</button>
         <button id="sessionHistoryBtn" class="ghost-btn">🕘 セッション履歴</button>
         <button id="statsBtn" class="ghost-btn">📊 統計</button>
@@ -229,6 +230,73 @@
         </div>
       </div>
     </div>
+  </dialog>
+
+  <dialog id="fastScoreDialog" class="fast-score-dialog">
+    <form id="fastScoreForm" method="dialog" class="fast-score-card">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">QUICK SCORE ENTRY</p>
+          <h2>採点入力</h2>
+        </div>
+        <button type="button" id="closeFastScoreBtn" class="icon-btn" aria-label="閉じる">✕</button>
+      </div>
+
+      <section class="fast-session-panel">
+        <div>
+          <span class="fast-section-label">今回のカラオケ</span>
+          <strong id="fastSessionStatus">新しいセッション</strong>
+          <small id="fastSessionTime">最初の採点から12時間が同じセッションです。</small>
+        </div>
+        <span id="fastServiceLockBadge" class="fast-service-lock hidden">今回：DAM</span>
+      </section>
+
+      <section id="fastServicePicker" class="fast-service-picker">
+        <span class="fast-section-label">最初に機種を選択</span>
+        <div class="fast-service-buttons">
+          <button type="button" id="fastDamBtn" class="fast-service-btn">DAM</button>
+          <button type="button" id="fastJoyBtn" class="fast-service-btn">JOYSOUND</button>
+        </div>
+        <small>最初の点数を保存すると、このセッション中は機種が固定されます。</small>
+      </section>
+
+      <section class="fast-song-search">
+        <label for="fastSongSearchInput" class="fast-section-label">曲を検索</label>
+        <input id="fastSongSearchInput" type="search" autocomplete="off" placeholder="曲名・アーティスト名">
+        <div id="fastSongResults" class="fast-song-results"></div>
+      </section>
+
+      <section id="fastSelectedSong" class="fast-selected-song hidden">
+        <div>
+          <span class="fast-section-label">選択中</span>
+          <strong id="fastSelectedTitle">—</strong>
+          <span id="fastSelectedArtist">—</span>
+        </div>
+        <div id="fastSelectedMeta" class="meta-row"></div>
+      </section>
+
+      <label class="fast-score-input-wrap">
+        <span class="fast-section-label">点数</span>
+        <div class="fast-score-input-row">
+          <input id="fastScoreInput" type="number" inputmode="decimal" min="0" max="100" step="0.001" placeholder="例：92.456">
+          <button type="submit" id="fastSaveScoreBtn" class="primary-btn">保存して次へ</button>
+        </div>
+        <small>点数欄で Enter を押すと保存し、そのまま次の曲検索へ戻ります。</small>
+      </label>
+
+      <p id="fastScoreMessage" class="form-error fast-score-message" role="alert"></p>
+
+      <section class="fast-recent-section">
+        <div class="fast-recent-head">
+          <div>
+            <span class="fast-section-label">今回の入力履歴</span>
+            <strong id="fastRecentCount">0件</strong>
+          </div>
+          <small>最新8件</small>
+        </div>
+        <div id="fastRecentList" class="fast-recent-list"></div>
+      </section>
+    </form>
   </dialog>
 
   <dialog id="songDialog">

@@ -1,4 +1,4 @@
-const APP_VERSION = "v19";
+const APP_VERSION = "v20";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -11,6 +11,10 @@ let pendingDamScores = [];
 let pendingJoysoundScores = [];
 let selectionMode = false;
 const selectedSongIds = new Set();
+
+let fastScoreSelectedSongId = null;
+let fastScoreSelectedService = null;
+let fastScoreSearchMatches = [];
 
 const QUICK_TAGS_KEY = "karaokeManagerQuickTagsV1";
 const THEME_KEY = "karaokeManagerThemeV1";
@@ -75,6 +79,28 @@ const els = {
   cloudSyncMessage: document.querySelector("#cloudSyncMessage"),
   cloudSyncNowBtn: document.querySelector("#cloudSyncNowBtn"),
   cloudLogoutBtn: document.querySelector("#cloudLogoutBtn"),
+  fastScoreBtn: document.querySelector("#fastScoreBtn"),
+  fastScoreDialog: document.querySelector("#fastScoreDialog"),
+  fastScoreForm: document.querySelector("#fastScoreForm"),
+  closeFastScoreBtn: document.querySelector("#closeFastScoreBtn"),
+  fastSessionStatus: document.querySelector("#fastSessionStatus"),
+  fastSessionTime: document.querySelector("#fastSessionTime"),
+  fastServiceLockBadge: document.querySelector("#fastServiceLockBadge"),
+  fastServicePicker: document.querySelector("#fastServicePicker"),
+  fastDamBtn: document.querySelector("#fastDamBtn"),
+  fastJoyBtn: document.querySelector("#fastJoyBtn"),
+  fastSongSearchInput: document.querySelector("#fastSongSearchInput"),
+  fastSongResults: document.querySelector("#fastSongResults"),
+  fastSelectedSong: document.querySelector("#fastSelectedSong"),
+  fastSelectedTitle: document.querySelector("#fastSelectedTitle"),
+  fastSelectedArtist: document.querySelector("#fastSelectedArtist"),
+  fastSelectedMeta: document.querySelector("#fastSelectedMeta"),
+  fastScoreInput: document.querySelector("#fastScoreInput"),
+  fastSaveScoreBtn: document.querySelector("#fastSaveScoreBtn"),
+  fastScoreMessage: document.querySelector("#fastScoreMessage"),
+  fastRecentCount: document.querySelector("#fastRecentCount"),
+  fastRecentList: document.querySelector("#fastRecentList"),
+
   multiSelectBtn: document.querySelector("#multiSelectBtn"),
   bulkSelectionBar: document.querySelector("#bulkSelectionBar"),
   bulkSelectedCount: document.querySelector("#bulkSelectedCount"),
@@ -1792,6 +1818,422 @@ function getVisibleSongs() {
 }
 
 
+
+function currentActiveSession(nowMs = Date.now()) {
+  const sessions = buildSessions();
+  const session = sessions[sessions.length - 1];
+  if (!session) return null;
+
+  const startMs = new Date(session.startAt).getTime();
+  if (!Number.isFinite(startMs)) return null;
+
+  const elapsed = nowMs - startMs;
+  const maxMs = SESSION_HOURS * 60 * 60 * 1000;
+
+  return elapsed >= 0 && elapsed <= maxMs ? session : null;
+}
+
+function fastSessionService(session) {
+  if (!session?.events?.length) return null;
+  return session.events[0].service === "JOYSOUND" ? "JOYSOUND" : "DAM";
+}
+
+function keyLabel(song) {
+  if (song.key === "" || song.key === null || song.key === undefined) return "キー未登録";
+  const key = Number(song.key);
+  if (key === 0) return "原曲";
+  return key > 0 ? `+${key}` : String(key);
+}
+
+function setFastScoreService(service) {
+  if (currentActiveSession()) return;
+
+  fastScoreSelectedService = service === "JOYSOUND" ? "JOYSOUND" : "DAM";
+  renderFastSessionPanel();
+  els.fastSongSearchInput.focus();
+}
+
+function renderFastSessionPanel() {
+  const session = currentActiveSession();
+
+  if (session) {
+    const service = fastSessionService(session);
+    fastScoreSelectedService = service;
+
+    els.fastSessionStatus.textContent = `カラオケ #${session.index}`;
+    els.fastSessionTime.textContent = `${formatDateTime(session.startAt)} 開始 / 最初の採点から12時間`;
+    els.fastServiceLockBadge.textContent = `今回：${service}`;
+    els.fastServiceLockBadge.classList.remove("hidden");
+    els.fastServicePicker.classList.add("hidden");
+  } else {
+    els.fastSessionStatus.textContent = "新しいセッション";
+    els.fastSessionTime.textContent = "最初の採点から12時間が同じセッションです。";
+    els.fastServiceLockBadge.classList.add("hidden");
+    els.fastServicePicker.classList.remove("hidden");
+
+    els.fastDamBtn.classList.toggle("selected", fastScoreSelectedService === "DAM");
+    els.fastJoyBtn.classList.toggle("selected", fastScoreSelectedService === "JOYSOUND");
+  }
+}
+
+function fastSongMatches(query) {
+  const q = normalizeText(query);
+  if (!q) return [];
+
+  return songs
+    .map(song => {
+      const title = normalizeText(song.title);
+      const artist = normalizeText(song.artist);
+
+      let rank = 99;
+      if (title === q) rank = 0;
+      else if (title.startsWith(q)) rank = 1;
+      else if (artist.startsWith(q)) rank = 2;
+      else if (title.includes(q)) rank = 3;
+      else if (artist.includes(q)) rank = 4;
+
+      return { song, rank };
+    })
+    .filter(item => item.rank < 99)
+    .sort((a, b) =>
+      a.rank - b.rank ||
+      a.song.title.localeCompare(b.song.title, "ja") ||
+      a.song.artist.localeCompare(b.song.artist, "ja")
+    )
+    .slice(0, 10)
+    .map(item => item.song);
+}
+
+function renderFastSongResults() {
+  const query = els.fastSongSearchInput.value;
+  fastScoreSearchMatches = fastSongMatches(query);
+  els.fastSongResults.innerHTML = "";
+
+  if (!query.trim()) {
+    const empty = document.createElement("div");
+    empty.className = "fast-result-empty";
+    empty.textContent = "曲名またはアーティスト名を入力してください。";
+    els.fastSongResults.append(empty);
+    return;
+  }
+
+  if (!fastScoreSearchMatches.length) {
+    const empty = document.createElement("div");
+    empty.className = "fast-result-empty";
+    empty.textContent = "該当する登録曲がありません。";
+    els.fastSongResults.append(empty);
+    return;
+  }
+
+  for (const song of fastScoreSearchMatches) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "fast-result-row";
+
+    const main = document.createElement("span");
+    main.className = "fast-result-main";
+
+    const title = document.createElement("strong");
+    title.textContent = song.title;
+
+    const artist = document.createElement("span");
+    artist.textContent = song.artist;
+
+    main.append(title, artist);
+
+    const meta = document.createElement("span");
+    meta.className = "fast-result-meta";
+    meta.textContent = [keyLabel(song), song.confidence ? `自信 ${song.confidence}` : ""]
+      .filter(Boolean)
+      .join(" / ");
+
+    button.append(main, meta);
+    button.addEventListener("click", () => selectFastScoreSong(song.id));
+    els.fastSongResults.append(button);
+  }
+}
+
+function selectFastScoreSong(songId) {
+  const song = songs.find(item => item.id === songId);
+  if (!song) return;
+
+  fastScoreSelectedSongId = song.id;
+  els.fastSelectedTitle.textContent = song.title;
+  els.fastSelectedArtist.textContent = song.artist;
+  els.fastSelectedMeta.innerHTML = "";
+
+  const badges = [keyLabel(song)];
+  if (song.confidence) badges.push(`自信 ${song.confidence}`);
+
+  for (const text of badges) {
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = text;
+    els.fastSelectedMeta.append(badge);
+  }
+
+  els.fastSelectedSong.classList.remove("hidden");
+  els.fastSongResults.innerHTML = "";
+  els.fastSongSearchInput.value = song.title;
+  els.fastScoreMessage.textContent = "";
+  els.fastScoreInput.focus();
+  els.fastScoreInput.select();
+}
+
+function clearFastScoreSelection({ keepMessage = false } = {}) {
+  fastScoreSelectedSongId = null;
+  fastScoreSearchMatches = [];
+  els.fastSongSearchInput.value = "";
+  els.fastScoreInput.value = "";
+  els.fastSelectedSong.classList.add("hidden");
+  els.fastSelectedTitle.textContent = "—";
+  els.fastSelectedArtist.textContent = "—";
+  els.fastSelectedMeta.innerHTML = "";
+  if (!keepMessage) els.fastScoreMessage.textContent = "";
+  renderFastSongResults();
+}
+
+function findScoreEntryIndex(entries, event) {
+  return normalizeScoreEntries(entries).findIndex(entry =>
+    entry.recordedAt === event.recordedAt &&
+    Number(entry.score) === Number(event.score)
+  );
+}
+
+async function saveFastScore() {
+  const song = songs.find(item => item.id === fastScoreSelectedSongId);
+  if (!song) {
+    els.fastScoreMessage.textContent = "先に曲を選択してください。";
+    els.fastSongSearchInput.focus();
+    return;
+  }
+
+  const session = currentActiveSession();
+  const service = session ? fastSessionService(session) : fastScoreSelectedService;
+
+  if (!service) {
+    els.fastScoreMessage.textContent = "最初にDAMかJOYSOUNDを選択してください。";
+    return;
+  }
+
+  const raw = els.fastScoreInput.value.trim();
+  const score = Number(raw);
+
+  if (!raw || !Number.isFinite(score) || score < 0 || score > 100) {
+    els.fastScoreMessage.textContent = "点数は0〜100の範囲で入力してください。";
+    els.fastScoreInput.focus();
+    els.fastScoreInput.select();
+    return;
+  }
+
+  const normalizedScore = Math.round(score * 1000) / 1000;
+  const entry = {
+    score: normalizedScore,
+    recordedAt: new Date().toISOString()
+  };
+
+  const currentEntries = service === "DAM" ? damScoresOf(song) : joysoundScoresOf(song);
+  const previousBest = serviceBestBefore(currentEntries);
+
+  const updatedSong = {
+    ...song,
+    damScores: service === "DAM"
+      ? [...damScoresOf(song), entry]
+      : damScoresOf(song),
+    joysoundScores: service === "JOYSOUND"
+      ? [...joysoundScoresOf(song), entry]
+      : joysoundScoresOf(song),
+    updatedAt: entry.recordedAt
+  };
+
+  await putSong(updatedSong);
+  songs = await getAllSongs();
+  render();
+
+  if (previousBest !== null && normalizedScore > previousBest) {
+    els.fastScoreMessage.textContent =
+      `🎉 ${service}自己ベスト更新！ ${formatScore(previousBest)}点 → ${formatScore(normalizedScore)}点`;
+    els.fastScoreMessage.classList.add("best-message");
+  } else if (previousBest === null) {
+    els.fastScoreMessage.textContent =
+      `${service}初回スコア ${formatScore(normalizedScore)}点を登録しました。`;
+    els.fastScoreMessage.classList.remove("best-message");
+  } else {
+    els.fastScoreMessage.textContent =
+      `${song.title}：${formatScore(normalizedScore)}点を登録しました。`;
+    els.fastScoreMessage.classList.remove("best-message");
+  }
+
+  clearFastScoreSelection({ keepMessage: true });
+}
+
+async function editFastScoreEvent(event) {
+  const song = songs.find(item => item.id === event.songId);
+  if (!song) return;
+
+  const raw = prompt(
+    `${event.title} の${event.service}点数を修正`,
+    formatScore(event.score)
+  );
+  if (raw === null) return;
+
+  const score = Number(String(raw).trim());
+  if (!Number.isFinite(score) || score < 0 || score > 100) {
+    alert("点数は0〜100の範囲で入力してください。");
+    return;
+  }
+
+  const source = event.service === "DAM" ? damScoresOf(song) : joysoundScoresOf(song);
+  const index = findScoreEntryIndex(source, event);
+  if (index < 0) {
+    alert("対象の点数が見つかりませんでした。同期後にもう一度お試しください。");
+    return;
+  }
+
+  const next = [...source];
+  next[index] = {
+    ...next[index],
+    score: Math.round(score * 1000) / 1000
+  };
+
+  const updatedSong = {
+    ...song,
+    damScores: event.service === "DAM" ? next : damScoresOf(song),
+    joysoundScores: event.service === "JOYSOUND" ? next : joysoundScoresOf(song),
+    updatedAt: new Date().toISOString()
+  };
+
+  await putSong(updatedSong);
+  songs = await getAllSongs();
+  render();
+  renderFastScoreMode();
+}
+
+async function deleteFastScoreEvent(event) {
+  if (!confirm(`「${event.title}」の ${event.service} ${formatScore(event.score)}点 を削除しますか？`)) {
+    return;
+  }
+
+  const song = songs.find(item => item.id === event.songId);
+  if (!song) return;
+
+  const source = event.service === "DAM" ? damScoresOf(song) : joysoundScoresOf(song);
+  const index = findScoreEntryIndex(source, event);
+  if (index < 0) return;
+
+  const next = [...source];
+  next.splice(index, 1);
+
+  const updatedSong = {
+    ...song,
+    damScores: event.service === "DAM" ? next : damScoresOf(song),
+    joysoundScores: event.service === "JOYSOUND" ? next : joysoundScoresOf(song),
+    updatedAt: new Date().toISOString()
+  };
+
+  await putSong(updatedSong);
+  songs = await getAllSongs();
+
+  // If every score in the session was removed, unlock machine selection.
+  if (!currentActiveSession()) {
+    fastScoreSelectedService = null;
+  }
+
+  render();
+  renderFastScoreMode();
+}
+
+function renderFastRecent() {
+  const session = currentActiveSession();
+  els.fastRecentList.innerHTML = "";
+
+  if (!session) {
+    els.fastRecentCount.textContent = "0件";
+
+    const empty = document.createElement("div");
+    empty.className = "fast-recent-empty";
+    empty.textContent = "このセッションの採点はまだありません。";
+    els.fastRecentList.append(empty);
+    return;
+  }
+
+  els.fastRecentCount.textContent = `${session.events.length}件`;
+
+  const recent = session.events.slice().reverse().slice(0, 8);
+
+  for (const event of recent) {
+    const row = document.createElement("div");
+    row.className = "fast-recent-row";
+
+    const info = document.createElement("div");
+    info.className = "fast-recent-info";
+
+    const title = document.createElement("strong");
+    title.textContent = event.title;
+
+    const sub = document.createElement("span");
+    sub.textContent = `${event.artist} / ${formatDateTime(event.recordedAt)}`;
+
+    info.append(title, sub);
+
+    const score = document.createElement("strong");
+    score.className = "fast-recent-score";
+    score.textContent = `${formatScore(event.score)}点`;
+
+    const actions = document.createElement("div");
+    actions.className = "fast-recent-actions";
+
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "ghost-btn small-btn";
+    edit.textContent = "修正";
+    edit.addEventListener("click", () => editFastScoreEvent(event));
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "danger-btn small-btn";
+    del.textContent = "削除";
+    del.addEventListener("click", () => deleteFastScoreEvent(event));
+
+    actions.append(edit, del);
+    row.append(info, score, actions);
+    els.fastRecentList.append(row);
+  }
+}
+
+function renderFastScoreMode() {
+  const selected = songs.find(song => song.id === fastScoreSelectedSongId);
+  if (fastScoreSelectedSongId && !selected) {
+    clearFastScoreSelection();
+  }
+
+  renderFastSessionPanel();
+  renderFastRecent();
+}
+
+function openFastScoreDialog() {
+  fastScoreSelectedSongId = null;
+  fastScoreSearchMatches = [];
+  fastScoreSelectedService = currentActiveSession()
+    ? fastSessionService(currentActiveSession())
+    : null;
+
+  els.fastScoreMessage.textContent = "";
+  els.fastScoreMessage.classList.remove("best-message");
+  clearFastScoreSelection();
+  renderFastScoreMode();
+  els.fastScoreDialog.showModal();
+
+  setTimeout(() => {
+    const active = currentActiveSession();
+    if (!active && !fastScoreSelectedService) {
+      els.fastDamBtn.focus();
+    } else {
+      els.fastSongSearchInput.focus();
+    }
+  }, 0);
+}
+
 function pruneSelectedSongIds() {
   const existingIds = new Set(songs.map(song => song.id));
   for (const id of [...selectedSongIds]) {
@@ -1951,6 +2393,11 @@ function render() {
 
   els.songCount.textContent = songs.length.toLocaleString("ja-JP");
   updateBulkSelectionUI();
+
+  if (els.fastScoreDialog?.open) {
+    renderFastScoreMode();
+  }
+
   els.songList.innerHTML = "";
 
   if (!visible.length) {
@@ -2851,7 +3298,7 @@ function updateBackupStatus() {
 function exportJSON() {
   const data = {
     app: "Karaoke Manager",
-    version: 19,
+    version: 20,
     exportedAt: new Date().toISOString(),
     songs,
     settings: {
@@ -3114,6 +3561,35 @@ function bindEvents() {
   els.continuousAddBtn.addEventListener("click", openContinuousAddDialog);
   els.themeSelect.addEventListener("change", () => applyTheme(els.themeSelect.value));
 
+  els.fastScoreBtn.addEventListener("click", openFastScoreDialog);
+  els.closeFastScoreBtn.addEventListener("click", () => els.fastScoreDialog.close());
+  els.fastDamBtn.addEventListener("click", () => setFastScoreService("DAM"));
+  els.fastJoyBtn.addEventListener("click", () => setFastScoreService("JOYSOUND"));
+
+  els.fastSongSearchInput.addEventListener("input", () => {
+    fastScoreSelectedSongId = null;
+    els.fastSelectedSong.classList.add("hidden");
+    els.fastScoreMessage.textContent = "";
+    renderFastSongResults();
+  });
+
+  els.fastSongSearchInput.addEventListener("keydown", event => {
+    if (event.isComposing || event.keyCode === 229) return;
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const first = fastScoreSearchMatches[0];
+      if (first) selectFastScoreSong(first.id);
+    }
+  });
+
+  els.fastScoreForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    await saveFastScore();
+    renderFastScoreMode();
+    setTimeout(() => els.fastSongSearchInput.focus(), 0);
+  });
+
   els.multiSelectBtn.addEventListener("click", () => setSelectionMode(!selectionMode));
   els.selectVisibleBtn.addEventListener("click", selectAllVisibleSongs);
   els.clearSelectionBtn.addEventListener("click", clearSongSelection);
@@ -3343,15 +3819,26 @@ function bindEvents() {
   });
 
   document.addEventListener("keydown", event => {
-    if (event.key === "Insert" && !selectionMode && !els.songDialog.open && !els.randomDialog.open && !els.bulkEditDialog.open) {
+    if (event.key === "Insert" && !selectionMode && !els.songDialog.open && !els.randomDialog.open && !els.bulkEditDialog.open && !els.fastScoreDialog.open) {
       event.preventDefault();
       openAddDialog();
     }
 
     if (event.ctrlKey && event.key.toLowerCase() === "f") {
       event.preventDefault();
-      els.searchInput.focus();
-      els.searchInput.select();
+
+      if (els.fastScoreDialog.open) {
+        els.fastSongSearchInput.focus();
+        els.fastSongSearchInput.select();
+      } else {
+        els.searchInput.focus();
+        els.searchInput.select();
+      }
+    }
+
+    if (event.key === "Escape" && els.fastScoreDialog.open) {
+      els.fastScoreDialog.close();
+      return;
     }
 
     if (event.key === "Escape" && els.bulkEditDialog.open) {

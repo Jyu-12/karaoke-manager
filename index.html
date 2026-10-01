@@ -18,7 +18,7 @@
     <div>
       <div class="brand-row">
         <p class="eyebrow">KARAOKE MANAGER</p>
-        <span id="appVersion" class="version-badge">v24</span>
+        <span id="appVersion" class="version-badge">v26</span>
         <button id="checkUpdateBtn" class="update-check-btn mobile-more-source" type="button" title="最新版を確認">↻ 更新確認</button>
       </div>
       <h1>曲管理</h1>
@@ -66,8 +66,6 @@
       <div class="filter-row">
         <button class="filter-chip active" data-filter="all">すべて</button>
         <button class="filter-chip" data-filter="favorite">お気に入り</button>
-        <button class="filter-chip" data-filter="staple">定番曲</button>
-        <button class="filter-chip" data-filter="practice">練習中</button>
       </div>
 
       <div class="select-row">
@@ -400,13 +398,15 @@
 
       <input id="songId" type="hidden">
 
-      <label>
+      <p id="editSongIdentity" class="edit-song-identity hidden"></p>
+
+      <label id="titleInputWrap">
         曲名 <span class="required">*</span>
         <input id="titleInput" type="text" required maxlength="120" autocomplete="off" list="titleSuggestions">
         <datalist id="titleSuggestions"></datalist>
       </label>
 
-      <label>
+      <label id="artistInputWrap">
         アーティスト名 <span class="required">*</span>
         <input id="artistInput" type="text" required maxlength="120" autocomplete="off" list="artistSuggestions">
         <datalist id="artistSuggestions"></datalist>
@@ -453,16 +453,13 @@
         </label>
       </div>
 
-      <label>
-        タグ
-        <input id="tagsInput" type="text" maxlength="300" placeholder="例：バラード, 高音, 盛り上がる">
-        <small class="help-text">複数付ける場合は「,」または「、」で区切ります。</small>
-      </label>
+      <input id="tagsInput" type="hidden">
 
-      <div class="quick-tag-section">
+      <div class="quick-tag-section tag-choice-section">
         <div class="quick-tag-head">
-          <span>よく使うタグ</span>
-          <button type="button" id="editQuickTagsBtn" class="text-btn">編集</button>
+          <span>タグ</span>
+          <small class="help-text">タグ管理で登録済みのものから選択</small>
+          <button type="button" id="editQuickTagsBtn" class="hidden" tabindex="-1" aria-hidden="true"></button>
         </div>
         <div id="quickTagButtons" class="quick-tag-buttons"></div>
       </div>
@@ -681,7 +678,12 @@
         </div>
         <button type="button" id="closeTagManagerBtn" class="icon-btn" aria-label="閉じる">✕</button>
       </div>
-      <p class="manager-note">タグ名の変更・削除は、そのタグが付いている全曲に反映されます。タグの色は名前から自動で決まり、PC・スマホで同じ色になります。</p>
+      <p class="manager-note">タグの追加はここで行います。曲の追加・編集画面では、ここに登録したタグから選択するだけです。名前変更・削除は、そのタグが付いている全曲に反映されます。</p>
+
+      <form id="addTagForm" class="tag-manager-add-row">
+        <input id="newTagNameInput" type="text" maxlength="80" autocomplete="off" placeholder="新しいタグ名">
+        <button type="submit" class="primary-btn small-btn">＋ タグを追加</button>
+      </form>
 
       <div class="tag-manager-tools">
         <span id="unusedTagCount" class="manager-note">未使用タグ 0件</span>

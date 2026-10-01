@@ -2508,4 +2508,191 @@ html[data-theme="light"] .filter-chip.active {
     grid-template-columns: 1fr;
   }
 }
-\n\n/* v25: staged sort priorities + denser smartphone song cards */\n.sort-priority-wrap.hidden {\n  display: none !important;\n}\n\n@media (max-width: 640px) {\n  .song-list {\n    gap: 5px;\n  }\n\n  .song-card {\n    min-height: 64px;\n    border-radius: 11px;\n  }\n\n  .favorite-btn {\n    width: 41px;\n    flex-basis: 41px;\n    font-size: 21px;\n  }\n\n  .song-main {\n    padding: 7px 9px;\n  }\n\n  .song-title-row {\n    gap: 5px;\n  }\n\n  .song-title {\n    font-size: 15px;\n    line-height: 1.2;\n  }\n\n  .song-artist {\n    margin: 2px 0 4px;\n    font-size: 12px;\n    line-height: 1.2;\n  }\n\n  .meta-row {\n    gap: 4px;\n  }\n\n  .key-badge,\n  .confidence-badge,\n  .play-count-badge {\n    padding: 2px 5px;\n    font-size: 9px;\n    line-height: 1.2;\n  }\n\n  .tag-row {\n    gap: 3px;\n    margin-top: 3px;\n  }\n\n  .tag-chip {\n    padding: 2px 5px;\n    font-size: 9px;\n    line-height: 1.2;\n  }\n}\n
+
+
+/* v25: staged sort priorities + denser smartphone song cards */
+.sort-priority-wrap.hidden {
+  display: none !important;
+}
+
+@media (max-width: 640px) {
+  .song-list {
+    gap: 5px;
+  }
+
+  .song-card {
+    min-height: 64px;
+    border-radius: 11px;
+  }
+
+  .favorite-btn {
+    width: 41px;
+    flex-basis: 41px;
+    font-size: 21px;
+  }
+
+  .song-main {
+    padding: 7px 9px;
+  }
+
+  .song-title-row {
+    gap: 5px;
+  }
+
+  .song-title {
+    font-size: 15px;
+    line-height: 1.2;
+  }
+
+  .song-artist {
+    margin: 2px 0 4px;
+    font-size: 12px;
+    line-height: 1.2;
+  }
+
+  .meta-row {
+    gap: 4px;
+  }
+
+  .key-badge,
+  .confidence-badge,
+  .play-count-badge {
+    padding: 2px 5px;
+    font-size: 9px;
+    line-height: 1.2;
+  }
+
+  .tag-row {
+    gap: 3px;
+    margin-top: 3px;
+  }
+
+  .tag-chip {
+    padding: 2px 5px;
+    font-size: 9px;
+    line-height: 1.2;
+  }
+}
+
+
+/* v26: edit identity, managed tag selection, extra-dense mobile song list */
+.edit-song-identity {
+  margin: -6px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-choice-section {
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+}
+
+.tag-choice-section .quick-tag-head {
+  gap: 8px;
+  align-items: baseline;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.tag-choice-section .quick-tag-head > span {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.tag-manager-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.tag-manager-add-row input {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .song-list {
+    gap: 3px;
+  }
+
+  .song-card {
+    min-height: 52px;
+    border-radius: 9px;
+  }
+
+  .favorite-btn {
+    width: 38px;
+    flex-basis: 38px;
+    font-size: 18px;
+  }
+
+  .song-main {
+    padding: 5px 7px;
+  }
+
+  .song-title-row {
+    gap: 4px;
+  }
+
+  .song-title {
+    font-size: 13px;
+    line-height: 1.15;
+  }
+
+  .song-artist {
+    margin: 1px 0 2px;
+    font-size: 10.5px;
+    line-height: 1.15;
+  }
+
+  .meta-row {
+    gap: 3px;
+  }
+
+  .key-badge,
+  .confidence-badge,
+  .play-count-badge,
+  .missed-badge {
+    padding: 1px 4px;
+    font-size: 8px;
+    line-height: 1.15;
+  }
+
+  .tag-row {
+    gap: 2px;
+    margin-top: 2px;
+  }
+
+  .tag-chip {
+    padding: 1px 4px;
+    font-size: 8px;
+    line-height: 1.15;
+  }
+
+  .tag-choice-section {
+    padding: 9px;
+  }
+
+  .quick-tag-buttons {
+    gap: 5px;
+  }
+
+  .quick-tag-btn {
+    padding: 6px 9px;
+    font-size: 11px;
+  }
+
+  .tag-manager-add-row {
+    grid-template-columns: 1fr;
+  }
+
+  .tag-manager-add-row button {
+    width: 100%;
+  }
+}

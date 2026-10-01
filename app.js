@@ -1,4 +1,4 @@
-const APP_VERSION = "v25";
+const APP_VERSION = "v26";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -156,6 +156,9 @@ const els = {
   songForm: document.querySelector("#songForm"),
   dialogTitle: document.querySelector("#dialogTitle"),
   songId: document.querySelector("#songId"),
+  editSongIdentity: document.querySelector("#editSongIdentity"),
+  titleInputWrap: document.querySelector("#titleInputWrap"),
+  artistInputWrap: document.querySelector("#artistInputWrap"),
   titleInput: document.querySelector("#titleInput"),
   artistInput: document.querySelector("#artistInput"),
   titleSuggestions: document.querySelector("#titleSuggestions"),
@@ -196,6 +199,8 @@ const els = {
   resetQuickTagsBtn: document.querySelector("#resetQuickTagsBtn"),
 
   tagManagerDialog: document.querySelector("#tagManagerDialog"),
+  addTagForm: document.querySelector("#addTagForm"),
+  newTagNameInput: document.querySelector("#newTagNameInput"),
   tagManagerList: document.querySelector("#tagManagerList"),
   unusedTagCount: document.querySelector("#unusedTagCount"),
   cleanupUnusedTagsBtn: document.querySelector("#cleanupUnusedTagsBtn"),
@@ -2884,19 +2889,19 @@ function syncConfidenceAvailability() {
 
 function renderQuickTagButtons() {
   const selected = new Set(parseTags(els.tagsInput.value).map(normalizeText));
-  const quickTags = getQuickTags();
+  const registeredTags = getTagManagerEntries().map(entry => entry.name);
 
   els.quickTagButtons.innerHTML = "";
 
-  if (!quickTags.length) {
+  if (!registeredTags.length) {
     const empty = document.createElement("span");
     empty.className = "quick-tag-empty";
-    empty.textContent = "よく使うタグが未登録です。";
+    empty.textContent = "タグ管理でタグを追加してください。";
     els.quickTagButtons.append(empty);
     return;
   }
 
-  for (const tag of quickTags) {
+  for (const tag of registeredTags) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "quick-tag-btn";
@@ -2938,14 +2943,12 @@ function adjustSongKeyFromNumpad(direction) {
 
 function songFormEnterOrder() {
   const fields = [
-    els.titleInput,
-    els.artistInput,
+    ...(formMode === "edit" ? [] : [els.titleInput, els.artistInput]),
     els.keyInput,
     els.confidenceInput,
     els.favoriteInput,
     els.stapleInput,
-    els.practiceInput,
-    els.tagsInput
+    els.practiceInput
   ];
 
   if (formMode === "continuous" && !els.continuousKeepArtistRow.classList.contains("hidden")) {
@@ -2987,6 +2990,10 @@ function setFormMode(mode) {
   els.duplicateSongBtn.classList.toggle("hidden", !isEdit);
   els.songStats.classList.remove("hidden");
   els.continuousKeepArtistRow.classList.toggle("hidden", !isContinuous);
+  els.titleInputWrap.classList.toggle("hidden", isEdit);
+  els.artistInputWrap.classList.toggle("hidden", isEdit);
+  els.editSongIdentity.classList.toggle("hidden", !isEdit);
+  if (!isEdit) els.editSongIdentity.textContent = "";
 
   if (mode === "edit") {
     els.dialogTitle.textContent = "曲を編集";
@@ -3041,6 +3048,7 @@ function openEditDialog(id) {
   els.songId.value = song.id;
   els.titleInput.value = song.title;
   els.artistInput.value = song.artist;
+  els.editSongIdentity.textContent = `${song.title} / ${song.artist}`;
   els.keyInput.value = song.key === null || song.key === undefined ? "" : String(song.key);
   els.confidenceInput.value = song.confidence || "";
   els.favoriteInput.checked = !!song.favorite;
@@ -3248,7 +3256,7 @@ async function cleanupUnusedTags() {
   const suffix = unused.length > 8 ? ` ほか${unused.length - 8}件` : "";
 
   if (!confirm(
-    `未使用タグ ${unused.length}件を「よく使うタグ」から削除しますか？\n\n${preview}${suffix}\n\n曲に付いているタグは削除されません。`
+    `未使用タグ ${unused.length}件を登録タグから削除しますか？\n\n${preview}${suffix}\n\n曲に付いているタグは削除されません。`
   )) return;
 
   const unusedKeys = new Set(unused.map(normalizeText));
@@ -3259,9 +3267,27 @@ async function cleanupUnusedTags() {
   renderTagManager();
 }
 
+function addRegisteredTag(rawName) {
+  const name = String(rawName || "").trim().replace(/\s+/g, " ");
+  if (!name) return false;
+
+  const key = normalizeText(name);
+  const exists = getTagManagerEntries().some(entry => normalizeText(entry.name) === key);
+  if (exists) {
+    alert(`タグ「${name}」はすでに登録されています。`);
+    return false;
+  }
+
+  saveQuickTags([...getQuickTags(), name]);
+  renderTagManager();
+  renderQuickTagButtons();
+  return true;
+}
+
 function openTagManager() {
   renderTagManager();
   els.tagManagerDialog.showModal();
+  setTimeout(() => els.newTagNameInput?.focus(), 0);
 }
 
 function renderTagManager() {
@@ -3295,8 +3321,8 @@ function renderTagManager() {
 
     const count = document.createElement("span");
     count.textContent = entry.count === 0
-      ? "未使用（よく使うタグ）"
-      : `${entry.count}曲${entry.quick ? " / よく使うタグ" : ""}`;
+      ? "未使用（登録済み）"
+      : `${entry.count}曲${entry.quick ? " / 登録済み" : ""}`;
 
     info.append(name, count);
 
@@ -3959,7 +3985,7 @@ function bindEvents() {
   els.randomAgainBtn.addEventListener("click", chooseRandom);
   els.randomCloseBtn.addEventListener("click", () => els.randomDialog.close());
 
-  els.editQuickTagsBtn.addEventListener("click", openQuickTagDialog);
+  els.editQuickTagsBtn?.addEventListener("click", openQuickTagDialog);
   els.closeQuickTagDialogBtn.addEventListener("click", closeQuickTagDialog);
   els.cancelQuickTagsBtn.addEventListener("click", closeQuickTagDialog);
   els.resetQuickTagsBtn.addEventListener("click", () => {
@@ -3974,6 +4000,13 @@ function bindEvents() {
   });
 
   els.manageTagsBtn.addEventListener("click", openTagManager);
+  els.addTagForm?.addEventListener("submit", event => {
+    event.preventDefault();
+    if (addRegisteredTag(els.newTagNameInput.value)) {
+      els.newTagNameInput.value = "";
+      els.newTagNameInput.focus();
+    }
+  });
   els.cleanupUnusedTagsBtn.addEventListener("click", cleanupUnusedTags);
   els.closeTagManagerBtn.addEventListener("click", () => els.tagManagerDialog.close());
   els.tagManagerDoneBtn.addEventListener("click", () => els.tagManagerDialog.close());

@@ -1,4 +1,4 @@
-const CACHE_NAME = "karaoke-manager-v25-sort-compact";
+const CACHE_NAME = "karaoke-manager-v26-edit-tags-compact";
 
 const CORE_ASSETS = [
   "./",

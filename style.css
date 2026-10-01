@@ -2391,3 +2391,121 @@ html[data-theme="light"] .filter-chip.active {
     font-size: 17px;
   }
 }
+
+
+/* v24: mobile "その他" menu + filter cleanup */
+.mobile-more-trigger,
+.mobile-more-dialog {
+  display: none;
+}
+
+.mobile-more-dialog {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.mobile-more-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.mobile-more-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mobile-more-item,
+.mobile-more-theme,
+.mobile-more-artist {
+  min-height: 50px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.mobile-more-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.mobile-more-theme,
+.mobile-more-artist {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+}
+
+.mobile-more-theme > span,
+.mobile-more-artist > span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.mobile-more-theme select,
+.mobile-more-artist select {
+  width: 100%;
+}
+
+@media (max-width: 640px) {
+  .artist-filter-main {
+    display: none !important;
+  }
+
+  .mobile-more-source {
+    display: none !important;
+  }
+
+  .mobile-more-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobile-more-dialog[open] {
+    display: block;
+  }
+
+  .summary-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #multiSelectBtn,
+  #mobileMoreBtn {
+    min-height: 44px;
+    font-size: 13px;
+  }
+
+  .mobile-more-dialog {
+    width: calc(100% - 16px);
+    max-width: 480px;
+    max-height: calc(100dvh - 24px);
+    border-radius: 18px;
+    padding: 0;
+  }
+
+  .mobile-more-card {
+    padding: 14px;
+  }
+
+  .mobile-more-item {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 390px) {
+  .mobile-more-list {
+    grid-template-columns: 1fr;
+  }
+}
+\n\n/* v25: staged sort priorities + denser smartphone song cards */\n.sort-priority-wrap.hidden {\n  display: none !important;\n}\n\n@media (max-width: 640px) {\n  .song-list {\n    gap: 5px;\n  }\n\n  .song-card {\n    min-height: 64px;\n    border-radius: 11px;\n  }\n\n  .favorite-btn {\n    width: 41px;\n    flex-basis: 41px;\n    font-size: 21px;\n  }\n\n  .song-main {\n    padding: 7px 9px;\n  }\n\n  .song-title-row {\n    gap: 5px;\n  }\n\n  .song-title {\n    font-size: 15px;\n    line-height: 1.2;\n  }\n\n  .song-artist {\n    margin: 2px 0 4px;\n    font-size: 12px;\n    line-height: 1.2;\n  }\n\n  .meta-row {\n    gap: 4px;\n  }\n\n  .key-badge,\n  .confidence-badge,\n  .play-count-badge {\n    padding: 2px 5px;\n    font-size: 9px;\n    line-height: 1.2;\n  }\n\n  .tag-row {\n    gap: 3px;\n    margin-top: 3px;\n  }\n\n  .tag-chip {\n    padding: 2px 5px;\n    font-size: 9px;\n    line-height: 1.2;\n  }\n}\n

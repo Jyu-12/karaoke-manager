@@ -1,4 +1,4 @@
-const APP_VERSION = "v22";
+const APP_VERSION = "v25";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -54,6 +54,14 @@ const els = {
   searchInput: document.querySelector("#searchInput"),
   sortSelect: document.querySelector("#sortSelect"),
   sortSelect2: document.querySelector("#sortSelect2"),
+  sortSelect3: document.querySelector("#sortSelect3"),
+  sortSelect4: document.querySelector("#sortSelect4"),
+  sortSelect5: document.querySelector("#sortSelect5"),
+  sortPriority1Wrap: document.querySelector("#sortPriority1Wrap"),
+  sortPriority2Wrap: document.querySelector("#sortPriority2Wrap"),
+  sortPriority3Wrap: document.querySelector("#sortPriority3Wrap"),
+  sortPriority4Wrap: document.querySelector("#sortPriority4Wrap"),
+  sortPriority5Wrap: document.querySelector("#sortPriority5Wrap"),
   resetFiltersBtn: document.querySelector("#resetFiltersBtn"),
   artistFilterSelect: document.querySelector("#artistFilterSelect"),
   tagFilterSelect: document.querySelector("#tagFilterSelect"),
@@ -126,6 +134,18 @@ const els = {
   statsBtn: document.querySelector("#statsBtn"),
   sessionHistoryBtn: document.querySelector("#sessionHistoryBtn"),
   randomBtn: document.querySelector("#randomBtn"),
+  mobileMoreBtn: document.querySelector("#mobileMoreBtn"),
+  mobileMoreDialog: document.querySelector("#mobileMoreDialog"),
+  closeMobileMoreBtn: document.querySelector("#closeMobileMoreBtn"),
+  mobileFastScoreBtn: document.querySelector("#mobileFastScoreBtn"),
+  mobileSessionHistoryBtn: document.querySelector("#mobileSessionHistoryBtn"),
+  mobileStatsBtn: document.querySelector("#mobileStatsBtn"),
+  mobileManageTagsBtn: document.querySelector("#mobileManageTagsBtn"),
+  mobileRandomBtn: document.querySelector("#mobileRandomBtn"),
+  mobileCloudBtn: document.querySelector("#mobileCloudBtn"),
+  mobileCheckUpdateBtn: document.querySelector("#mobileCheckUpdateBtn"),
+  mobileThemeSelect: document.querySelector("#mobileThemeSelect"),
+  mobileArtistFilterSelect: document.querySelector("#mobileArtistFilterSelect"),
   exportBtn: document.querySelector("#exportBtn"),
   backupStatus: document.querySelector("#backupStatus"),
   importInput: document.querySelector("#importInput"),
@@ -1545,6 +1565,7 @@ function applyTheme(theme) {
   const next = allowed.includes(theme) ? theme : "system";
   document.documentElement.dataset.theme = next;
   els.themeSelect.value = next;
+  if (els.mobileThemeSelect) els.mobileThemeSelect.value = next;
   localStorage.setItem(THEME_KEY, next);
 }
 
@@ -1730,6 +1751,11 @@ function refreshFilters() {
   }
   if (artists.includes(selectedArtist)) els.artistFilterSelect.value = selectedArtist;
 
+  if (els.mobileArtistFilterSelect) {
+    els.mobileArtistFilterSelect.innerHTML = els.artistFilterSelect.innerHTML;
+    els.mobileArtistFilterSelect.value = els.artistFilterSelect.value;
+  }
+
   const tags = [...new Set(songs.flatMap(song => parseTags(song.tags)))]
     .sort((a, b) => a.localeCompare(b, "ja"));
 
@@ -1753,8 +1779,6 @@ function getVisibleSongs() {
     if (currentFilter === "favorite" && !song.favorite) return false;
     if (currentFilter === "staple" && !song.staple) return false;
     if (currentFilter === "practice" && !song.practice) return false;
-    if (currentFilter === "hasKey" && (song.key === "" || song.key === null || song.key === undefined)) return false;
-    if (currentFilter === "noKey" && !(song.key === "" || song.key === null || song.key === undefined)) return false;
 
     if (artistFilter && normalizeText(song.artist) !== normalizeText(artistFilter)) return false;
 
@@ -1779,8 +1803,13 @@ function getVisibleSongs() {
     ].some(value => normalizeText(value).includes(q));
   });
 
-  const primarySort = els.sortSelect.value;
-  const secondarySort = els.sortSelect2.value;
+  const activeSorts = [
+    els.sortSelect?.value || "",
+    els.sortSelect2?.value || "",
+    els.sortSelect3?.value || "",
+    els.sortSelect4?.value || "",
+    els.sortSelect5?.value || "",
+  ].filter(Boolean);
 
   const compareBy = (sort, a, b) => {
     if (!sort) return 0;
@@ -1831,11 +1860,10 @@ function getVisibleSongs() {
   };
 
   result.sort((a, b) => {
-    const first = compareBy(primarySort, a, b);
-    if (first !== 0) return first;
-
-    const second = compareBy(secondarySort, a, b);
-    if (second !== 0) return second;
+    for (const sort of activeSorts) {
+      const compared = compareBy(sort, a, b);
+      if (compared !== 0) return compared;
+    }
 
     // 完全同順位のときだけ、表示を安定させるため曲名→アーティストで固定。
     return a.title.localeCompare(b.title, "ja")
@@ -3635,6 +3663,27 @@ function requestAutoSync(reason = "resume") {
 }
 
 
+function updateSortPriorityVisibility(changedIndex = null) {
+  const selects = [els.sortSelect, els.sortSelect2, els.sortSelect3, els.sortSelect4, els.sortSelect5];
+  const wraps = [els.sortPriority1Wrap, els.sortPriority2Wrap, els.sortPriority3Wrap, els.sortPriority4Wrap, els.sortPriority5Wrap];
+
+  if (Number.isInteger(changedIndex) && changedIndex >= 0 && !selects[changedIndex]?.value) {
+    for (let i = changedIndex + 1; i < selects.length; i++) {
+      if (selects[i]) selects[i].value = "";
+    }
+  }
+
+  wraps.forEach((wrap, index) => {
+    if (!wrap) return;
+    const shouldShow = index === 0 || !!selects[index - 1]?.value;
+    wrap.classList.toggle("hidden", !shouldShow);
+
+    if (!shouldShow && selects[index]) {
+      selects[index].value = "";
+    }
+  });
+}
+
 function resetSearchAndFilters() {
   els.searchInput.value = "";
   currentFilter = "all";
@@ -3644,6 +3693,7 @@ function resetSearchAndFilters() {
   });
 
   els.artistFilterSelect.value = "";
+  if (els.mobileArtistFilterSelect) els.mobileArtistFilterSelect.value = "";
   els.tagFilterSelect.value = "";
   els.recentFilterSelect.value = "";
 
@@ -3655,6 +3705,40 @@ function bindEvents() {
   els.addSongBtn.addEventListener("click", openAddDialog);
   els.continuousAddBtn.addEventListener("click", openContinuousAddDialog);
   els.themeSelect.addEventListener("change", () => applyTheme(els.themeSelect.value));
+
+  const closeMobileMore = () => {
+    if (els.mobileMoreDialog?.open) els.mobileMoreDialog.close();
+  };
+  const openFromMobileMore = action => {
+    closeMobileMore();
+    setTimeout(action, 0);
+  };
+
+  els.mobileMoreBtn?.addEventListener("click", () => {
+    if (els.mobileThemeSelect) els.mobileThemeSelect.value = els.themeSelect.value;
+    if (els.mobileArtistFilterSelect) {
+      els.mobileArtistFilterSelect.innerHTML = els.artistFilterSelect.innerHTML;
+      els.mobileArtistFilterSelect.value = els.artistFilterSelect.value;
+    }
+    if (!els.mobileMoreDialog.open) els.mobileMoreDialog.showModal();
+  });
+  els.closeMobileMoreBtn?.addEventListener("click", closeMobileMore);
+  els.mobileFastScoreBtn?.addEventListener("click", () => openFromMobileMore(openFastScoreDialog));
+  els.mobileSessionHistoryBtn?.addEventListener("click", () => openFromMobileMore(openSessionHistory));
+  els.mobileStatsBtn?.addEventListener("click", () => openFromMobileMore(openStatistics));
+  els.mobileManageTagsBtn?.addEventListener("click", () => openFromMobileMore(openTagManager));
+  els.mobileRandomBtn?.addEventListener("click", () => openFromMobileMore(chooseRandom));
+  els.mobileCloudBtn?.addEventListener("click", () => openFromMobileMore(openCloudDialog));
+  els.mobileCheckUpdateBtn?.addEventListener("click", () => {
+    closeMobileMore();
+    checkForAppUpdate({ manual: true });
+  });
+  els.mobileThemeSelect?.addEventListener("change", () => applyTheme(els.mobileThemeSelect.value));
+  els.mobileArtistFilterSelect?.addEventListener("change", () => {
+    els.artistFilterSelect.value = els.mobileArtistFilterSelect.value;
+    render();
+    closeMobileMore();
+  });
 
   els.fastScoreBtn.addEventListener("click", openFastScoreDialog);
   els.closeFastScoreBtn.addEventListener("click", () => els.fastScoreDialog.close());
@@ -3849,10 +3933,17 @@ function bindEvents() {
   });
 
   els.searchInput.addEventListener("input", render);
-  els.sortSelect.addEventListener("change", render);
-  els.sortSelect2.addEventListener("change", render);
+  [els.sortSelect, els.sortSelect2, els.sortSelect3, els.sortSelect4, els.sortSelect5].forEach((select, index) => {
+    select?.addEventListener("change", () => {
+      updateSortPriorityVisibility(index);
+      render();
+    });
+  });
   els.resetFiltersBtn.addEventListener("click", resetSearchAndFilters);
-  els.artistFilterSelect.addEventListener("change", render);
+  els.artistFilterSelect.addEventListener("change", () => {
+    if (els.mobileArtistFilterSelect) els.mobileArtistFilterSelect.value = els.artistFilterSelect.value;
+    render();
+  });
   els.tagFilterSelect.addEventListener("change", render);
   els.recentFilterSelect.addEventListener("change", render);
 
@@ -3990,10 +4081,15 @@ async function init() {
   // 初回表示の既定値
   currentFilter = "all";
   els.artistFilterSelect.value = "";
+  if (els.mobileArtistFilterSelect) els.mobileArtistFilterSelect.value = "";
   els.tagFilterSelect.value = "";
   els.recentFilterSelect.value = "";
-  els.sortSelect.value = "title";
+  els.sortSelect.value = "";
   els.sortSelect2.value = "";
+  els.sortSelect3.value = "";
+  els.sortSelect4.value = "";
+  els.sortSelect5.value = "";
+  updateSortPriorityVisibility();
 
   loadCloudAuth();
   updateCloudUI();

@@ -18,13 +18,13 @@
     <div>
       <div class="brand-row">
         <p class="eyebrow">KARAOKE MANAGER</p>
-        <span id="appVersion" class="version-badge">v22</span>
-        <button id="checkUpdateBtn" class="update-check-btn" type="button" title="最新版を確認">↻ 更新確認</button>
+        <span id="appVersion" class="version-badge">v24</span>
+        <button id="checkUpdateBtn" class="update-check-btn mobile-more-source" type="button" title="最新版を確認">↻ 更新確認</button>
       </div>
       <h1>曲管理</h1>
     </div>
     <div class="header-actions">
-      <label class="theme-control">
+      <label class="theme-control mobile-more-source">
         <span>テーマ</span>
         <select id="themeSelect">
           <option value="system">端末設定</option>
@@ -32,7 +32,7 @@
           <option value="dark">ダーク</option>
         </select>
       </label>
-      <button id="cloudBtn" class="ghost-btn cloud-status-btn">
+      <button id="cloudBtn" class="ghost-btn cloud-status-btn mobile-more-source">
         ☁ <span id="cloudBtnText">クラウド</span>
       </button>
       <button id="continuousAddBtn" class="ghost-btn">連続追加</button>
@@ -47,12 +47,13 @@
         <strong id="songCount">0</strong>
       </div>
       <div class="summary-actions">
-        <button id="fastScoreBtn" class="primary-btn">🎤 採点入力</button>
+        <button id="fastScoreBtn" class="primary-btn mobile-more-source">🎤 採点入力</button>
         <button id="multiSelectBtn" class="ghost-btn">☑ 複数選択</button>
-        <button id="sessionHistoryBtn" class="ghost-btn">🕘 セッション履歴</button>
-        <button id="statsBtn" class="ghost-btn">📊 統計</button>
-        <button id="manageTagsBtn" class="ghost-btn">🏷 タグ管理</button>
-        <button id="randomBtn" class="ghost-btn">🎲 ランダム選曲</button>
+        <button id="sessionHistoryBtn" class="ghost-btn mobile-more-source">🕘 セッション履歴</button>
+        <button id="statsBtn" class="ghost-btn mobile-more-source">📊 統計</button>
+        <button id="manageTagsBtn" class="ghost-btn mobile-more-source">🏷 タグ管理</button>
+        <button id="randomBtn" class="ghost-btn mobile-more-source">🎲 ランダム選曲</button>
+        <button id="mobileMoreBtn" class="ghost-btn mobile-more-trigger" type="button" aria-haspopup="dialog">⋯ その他</button>
       </div>
     </section>
 
@@ -67,12 +68,10 @@
         <button class="filter-chip" data-filter="favorite">お気に入り</button>
         <button class="filter-chip" data-filter="staple">定番曲</button>
         <button class="filter-chip" data-filter="practice">練習中</button>
-        <button class="filter-chip" data-filter="hasKey">キーあり</button>
-        <button class="filter-chip" data-filter="noKey">キーなし</button>
       </div>
 
       <div class="select-row">
-        <label>
+        <label class="artist-filter-main">
           アーティスト
           <select id="artistFilterSelect">
             <option value="">すべてのアーティスト</option>
@@ -99,10 +98,11 @@
           </select>
         </label>
 
-        <label>
+        <label id="sortPriority1Wrap" class="sort-priority-wrap">
           並べ替え 優先度1
           <select id="sortSelect">
-            <option value="title" selected>曲名順</option>
+            <option value="" selected>指定なし</option>
+            <option value="title">曲名順</option>
             <option value="createdDesc">登録が新しい順</option>
             <option value="createdAsc">登録が古い順</option>
             <option value="favoriteFirst">お気に入り優先</option>
@@ -115,9 +115,60 @@
           </select>
         </label>
 
-        <label>
+        <label id="sortPriority2Wrap" class="sort-priority-wrap hidden">
           並べ替え 優先度2
           <select id="sortSelect2">
+            <option value="" selected>指定なし</option>
+            <option value="title">曲名順</option>
+            <option value="createdDesc">登録が新しい順</option>
+            <option value="createdAsc">登録が古い順</option>
+            <option value="favoriteFirst">お気に入り優先</option>
+            <option value="artist">アーティスト順</option>
+            <option value="confidence">自信ランク順</option>
+            <option value="keyDesc">キーが高い順</option>
+            <option value="playCountDesc">歌唱回数が多い順</option>
+            <option value="lastSungDesc">最近歌った順</option>
+            <option value="missedSessionsDesc">未歌唱回数が多い順</option>
+          </select>
+        </label>
+
+        <label id="sortPriority3Wrap" class="sort-priority-wrap hidden">
+          並べ替え 優先度3
+          <select id="sortSelect3">
+            <option value="" selected>指定なし</option>
+            <option value="title">曲名順</option>
+            <option value="createdDesc">登録が新しい順</option>
+            <option value="createdAsc">登録が古い順</option>
+            <option value="favoriteFirst">お気に入り優先</option>
+            <option value="artist">アーティスト順</option>
+            <option value="confidence">自信ランク順</option>
+            <option value="keyDesc">キーが高い順</option>
+            <option value="playCountDesc">歌唱回数が多い順</option>
+            <option value="lastSungDesc">最近歌った順</option>
+            <option value="missedSessionsDesc">未歌唱回数が多い順</option>
+          </select>
+        </label>
+
+        <label id="sortPriority4Wrap" class="sort-priority-wrap hidden">
+          並べ替え 優先度4
+          <select id="sortSelect4">
+            <option value="" selected>指定なし</option>
+            <option value="title">曲名順</option>
+            <option value="createdDesc">登録が新しい順</option>
+            <option value="createdAsc">登録が古い順</option>
+            <option value="favoriteFirst">お気に入り優先</option>
+            <option value="artist">アーティスト順</option>
+            <option value="confidence">自信ランク順</option>
+            <option value="keyDesc">キーが高い順</option>
+            <option value="playCountDesc">歌唱回数が多い順</option>
+            <option value="lastSungDesc">最近歌った順</option>
+            <option value="missedSessionsDesc">未歌唱回数が多い順</option>
+          </select>
+        </label>
+
+        <label id="sortPriority5Wrap" class="sort-priority-wrap hidden">
+          並べ替え 優先度5
+          <select id="sortSelect5">
             <option value="" selected>指定なし</option>
             <option value="title">曲名順</option>
             <option value="createdDesc">登録が新しい順</option>
@@ -170,6 +221,44 @@
       </div>
     </section>
   </main>
+
+  <dialog id="mobileMoreDialog" class="mobile-more-dialog">
+    <div class="mobile-more-card">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">MENU</p>
+          <h2>その他</h2>
+        </div>
+        <button type="button" id="closeMobileMoreBtn" class="icon-btn" aria-label="閉じる">✕</button>
+      </div>
+
+      <div class="mobile-more-list">
+        <button type="button" id="mobileFastScoreBtn" class="mobile-more-item">🎤 <span>採点入力</span></button>
+        <button type="button" id="mobileSessionHistoryBtn" class="mobile-more-item">🕘 <span>セッション履歴</span></button>
+        <button type="button" id="mobileStatsBtn" class="mobile-more-item">📊 <span>統計</span></button>
+        <button type="button" id="mobileManageTagsBtn" class="mobile-more-item">🏷 <span>タグ管理</span></button>
+        <button type="button" id="mobileRandomBtn" class="mobile-more-item">🎲 <span>ランダム選曲</span></button>
+        <button type="button" id="mobileCloudBtn" class="mobile-more-item">☁ <span>クラウド</span></button>
+        <button type="button" id="mobileCheckUpdateBtn" class="mobile-more-item">↻ <span>更新確認</span></button>
+
+        <label class="mobile-more-artist">
+          <span>アーティスト別</span>
+          <select id="mobileArtistFilterSelect">
+            <option value="">すべてのアーティスト</option>
+          </select>
+        </label>
+
+        <label class="mobile-more-theme">
+          <span>テーマ</span>
+          <select id="mobileThemeSelect">
+            <option value="system">端末設定</option>
+            <option value="light">ライト</option>
+            <option value="dark">ダーク</option>
+          </select>
+        </label>
+      </div>
+    </div>
+  </dialog>
 
   <dialog id="cloudDialog">
     <div class="cloud-card">

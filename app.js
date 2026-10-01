@@ -1,4 +1,4 @@
-const APP_VERSION = "v26";
+const APP_VERSION = "v28";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -290,7 +290,7 @@ async function checkForAppUpdate({ manual = true } = {}) {
   if (!("serviceWorker" in navigator) || location.protocol === "file:") {
     if (manual) {
       setUpdateButtonState("更新確認不可", true);
-      setTimeout(() => setUpdateButtonState("↻ 更新確認", false), 1800);
+      setTimeout(() => setUpdateButtonState("↻ 更新", false), 1800);
     }
     return;
   }
@@ -332,14 +332,14 @@ async function checkForAppUpdate({ manual = true } = {}) {
 
     if (manual) {
       setUpdateButtonState("✓ 最新版です", true);
-      setTimeout(() => setUpdateButtonState("↻ 更新確認", false), 1600);
+      setTimeout(() => setUpdateButtonState("↻ 更新", false), 1600);
     }
   } catch (error) {
     console.warn("Update check failed:", error);
 
     if (manual) {
       setUpdateButtonState("更新確認失敗", true);
-      setTimeout(() => setUpdateButtonState("↻ 更新確認", false), 1800);
+      setTimeout(() => setUpdateButtonState("↻ 更新", false), 1800);
     }
   }
 }

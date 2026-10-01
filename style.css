@@ -2696,3 +2696,32 @@ html[data-theme="light"] .filter-chip.active {
     width: 100%;
   }
 }
+
+
+/* v27: keep the update button beside the version badge on every screen */
+@media (max-width: 640px) {
+  .brand-row {
+    flex-wrap: nowrap;
+  }
+
+  .version-badge,
+  .update-check-btn {
+    flex: 0 0 auto;
+  }
+
+  .update-check-btn {
+    padding: 3px 6px;
+    font-size: 9px;
+  }
+}
+
+/* v28: keep the song editor close button below the iPhone status/safe area */
+@media (max-width: 640px) {
+  #songForm {
+    padding-top: calc(20px + env(safe-area-inset-top));
+  }
+
+  #songForm .dialog-head {
+    top: env(safe-area-inset-top);
+  }
+}

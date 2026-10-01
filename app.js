@@ -1,4 +1,4 @@
-const APP_VERSION = "v21";
+const APP_VERSION = "v22";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -3393,7 +3393,7 @@ function updateBackupStatus() {
 function exportJSON() {
   const data = {
     app: "Karaoke Manager",
-    version: 21,
+    version: 22,
     exportedAt: new Date().toISOString(),
     songs,
     settings: {

@@ -1,4 +1,4 @@
-const APP_VERSION = "v28";
+const APP_VERSION = "v31";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -168,6 +168,8 @@ const els = {
   favoriteInput: document.querySelector("#favoriteInput"),
   stapleInput: document.querySelector("#stapleInput"),
   practiceInput: document.querySelector("#practiceInput"),
+  stapleRow: document.querySelector("#stapleRow"),
+  practiceRow: document.querySelector("#practiceRow"),
   tagsInput: document.querySelector("#tagsInput"),
   deleteSongBtn: document.querySelector("#deleteSongBtn"),
   duplicateSongBtn: document.querySelector("#duplicateSongBtn"),
@@ -1673,6 +1675,32 @@ function scoreEntryFromInput(input) {
   };
 }
 
+async function persistPendingScoresImmediately() {
+  if (formMode !== "edit") return true;
+
+  const id = els.songId.value;
+  const existing = songs.find(song => song.id === id);
+  if (!id || !existing) return false;
+
+  const updated = {
+    ...existing,
+    damScores: normalizeScoreEntries(pendingDamScores),
+    joysoundScores: normalizeScoreEntries(pendingJoysoundScores),
+    updatedAt: new Date().toISOString(),
+  };
+
+  try {
+    await putSong(updated);
+    songs = await getAllSongs();
+    render();
+    return true;
+  } catch (error) {
+    console.error("score autosave failed", error);
+    alert("点数を保存できませんでした。もう一度お試しください。");
+    return false;
+  }
+}
+
 function renderScoreHistory() {
   const renderList = (target, entries, service) => {
     target.innerHTML = "";
@@ -1704,10 +1732,11 @@ function renderScoreHistory() {
       del.type = "button";
       del.className = "score-delete-btn";
       del.textContent = "削除";
-      del.addEventListener("click", () => {
+      del.addEventListener("click", async () => {
         if (service === "dam") pendingDamScores.splice(index, 1);
         else pendingJoysoundScores.splice(index, 1);
         renderScoreHistory();
+        await persistPendingScoresImmediately();
       });
 
       row.append(main, del);
@@ -2947,8 +2976,7 @@ function songFormEnterOrder() {
     els.keyInput,
     els.confidenceInput,
     els.favoriteInput,
-    els.stapleInput,
-    els.practiceInput
+    ...(formMode === "edit" ? [els.stapleInput, els.practiceInput] : [])
   ];
 
   if (formMode === "continuous" && !els.continuousKeepArtistRow.classList.contains("hidden")) {
@@ -2993,6 +3021,8 @@ function setFormMode(mode) {
   els.titleInputWrap.classList.toggle("hidden", isEdit);
   els.artistInputWrap.classList.toggle("hidden", isEdit);
   els.editSongIdentity.classList.toggle("hidden", !isEdit);
+  els.stapleRow?.classList.toggle("hidden", !isEdit);
+  els.practiceRow?.classList.toggle("hidden", !isEdit);
   if (!isEdit) els.editSongIdentity.textContent = "";
 
   if (mode === "edit") {
@@ -3874,7 +3904,7 @@ function bindEvents() {
   els.keyInput.addEventListener("change", syncConfidenceAvailability);
   els.tagsInput.addEventListener("input", renderQuickTagButtons);
 
-  els.addDamScoreBtn.addEventListener("click", () => {
+  els.addDamScoreBtn.addEventListener("click", async () => {
     const entry = scoreEntryFromInput(els.damScoreInput);
     if (!entry) return;
 
@@ -3883,18 +3913,23 @@ function bindEvents() {
     els.damScoreInput.value = "";
     renderScoreHistory();
 
+    const savedImmediately = await persistPendingScoresImmediately();
+
     if (previousBest !== null && Number(entry.score) > previousBest) {
-      els.formError.textContent = `🎉 DAM自己ベスト更新！ ${formatScore(previousBest)}点 → ${formatScore(entry.score)}点`;
+      els.formError.textContent = `🎉 DAM自己ベスト更新！ ${formatScore(previousBest)}点 → ${formatScore(entry.score)}点${savedImmediately && formMode === "edit" ? "（保存済み）" : ""}`;
       els.formError.classList.add("best-message");
     } else if (previousBest === null) {
-      els.formError.textContent = `DAM初回スコア ${formatScore(entry.score)}点を登録しました。`;
+      els.formError.textContent = `DAM初回スコア ${formatScore(entry.score)}点を登録しました${savedImmediately && formMode === "edit" ? "（保存済み）" : "。"}`;
+      els.formError.classList.remove("best-message");
+    } else if (savedImmediately && formMode === "edit") {
+      els.formError.textContent = `DAM ${formatScore(entry.score)}点を追加して保存しました。`;
       els.formError.classList.remove("best-message");
     }
 
     els.damScoreInput.focus();
   });
 
-  els.addJoysoundScoreBtn.addEventListener("click", () => {
+  els.addJoysoundScoreBtn.addEventListener("click", async () => {
     const entry = scoreEntryFromInput(els.joysoundScoreInput);
     if (!entry) return;
 
@@ -3903,11 +3938,16 @@ function bindEvents() {
     els.joysoundScoreInput.value = "";
     renderScoreHistory();
 
+    const savedImmediately = await persistPendingScoresImmediately();
+
     if (previousBest !== null && Number(entry.score) > previousBest) {
-      els.formError.textContent = `🎉 JOYSOUND自己ベスト更新！ ${formatScore(previousBest)}点 → ${formatScore(entry.score)}点`;
+      els.formError.textContent = `🎉 JOYSOUND自己ベスト更新！ ${formatScore(previousBest)}点 → ${formatScore(entry.score)}点${savedImmediately && formMode === "edit" ? "（保存済み）" : ""}`;
       els.formError.classList.add("best-message");
     } else if (previousBest === null) {
-      els.formError.textContent = `JOYSOUND初回スコア ${formatScore(entry.score)}点を登録しました。`;
+      els.formError.textContent = `JOYSOUND初回スコア ${formatScore(entry.score)}点を登録しました${savedImmediately && formMode === "edit" ? "（保存済み）" : "。"}`;
+      els.formError.classList.remove("best-message");
+    } else if (savedImmediately && formMode === "edit") {
+      els.formError.textContent = `JOYSOUND ${formatScore(entry.score)}点を追加して保存しました。`;
       els.formError.classList.remove("best-message");
     }
 

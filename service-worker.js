@@ -1,4 +1,4 @@
-const CACHE_NAME = "karaoke-manager-v28-safe-close";
+const CACHE_NAME = "karaoke-manager-v31-pc-unified";
 
 const CORE_ASSETS = [
   "./",

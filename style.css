@@ -2725,3 +2725,103 @@ html[data-theme="light"] .filter-chip.active {
     top: env(safe-area-inset-top);
   }
 }
+
+
+/* v31: apply the streamlined smartphone layout naturally to desktop too */
+/* Keep only Add / Continuous Add / Multi-select visible as primary actions.
+   The remaining tools, artist filter, cloud and theme live in the shared "その他" menu. */
+.mobile-more-source,
+.artist-filter-main {
+  display: none !important;
+}
+
+.mobile-more-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-more-dialog[open] {
+  display: block;
+}
+
+/* Desktop song rows are compact too, while retaining enough room for mouse use. */
+@media (min-width: 641px) {
+  .song-list {
+    gap: 6px;
+  }
+
+  .song-card {
+    min-height: 64px;
+    border-radius: 12px;
+  }
+
+  .favorite-btn {
+    width: 42px;
+    flex-basis: 42px;
+    font-size: 20px;
+  }
+
+  .song-main {
+    padding: 8px 10px;
+  }
+
+  .song-title-row {
+    gap: 6px;
+  }
+
+  .song-title {
+    font-size: 14.5px;
+    line-height: 1.2;
+  }
+
+  .song-artist {
+    margin: 2px 0 4px;
+    font-size: 11.5px;
+    line-height: 1.2;
+  }
+
+  .meta-row {
+    gap: 5px;
+  }
+
+  .key-badge,
+  .confidence-badge,
+  .play-count-badge,
+  .missed-badge {
+    padding: 2px 6px;
+    font-size: 9.5px;
+    line-height: 1.2;
+  }
+
+  .tag-row {
+    gap: 4px;
+    margin-top: 3px;
+  }
+
+  .tag-chip {
+    padding: 2px 6px;
+    font-size: 9.5px;
+    line-height: 1.2;
+  }
+
+  /* Make the shared menu look like a normal desktop utility palette. */
+  .mobile-more-dialog {
+    width: min(560px, calc(100% - 32px));
+    max-height: min(760px, calc(100vh - 48px));
+  }
+
+  .mobile-more-card {
+    padding: 18px;
+  }
+
+  .mobile-more-list {
+    gap: 10px;
+  }
+
+  .mobile-more-item,
+  .mobile-more-theme,
+  .mobile-more-artist {
+    min-height: 46px;
+  }
+}

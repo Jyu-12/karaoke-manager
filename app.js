@@ -1,4 +1,4 @@
-const APP_VERSION = "v31";
+const APP_VERSION = "v33";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -23,14 +23,16 @@ const SESSION_HOURS = 12;
 const SUPABASE_URL = "https://zrihlqlqgpbmtlhigceb.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_9OK0z69_4ZSo_RVX9WXXfQ_x7nMOWEk";
 const CLOUD_AUTH_KEY = "karaokeCloudAuthV1";
-const CLOUD_DIRTY_KEY = "karaokeCloudDirtyIdsV1";
-const CLOUD_TOMBSTONES_KEY = "karaokeCloudTombstonesV1";
-const CLOUD_INITIALIZED_KEY = "karaokeCloudInitializedV1";
-const CLOUD_LAST_SYNC_KEY = "karaokeCloudLastSyncV1";
-const CLOUD_BASELINE_KEY = "karaokeCloudBaselinesV1";
-const CLOUD_LAST_RESULT_KEY = "karaokeCloudLastResultV1";
+const CLOUD_DIRTY_KEY = "karaokeSharedCloudDirtyIdsV2";
+const CLOUD_TOMBSTONES_KEY = "karaokeSharedCloudTombstonesV2";
+const CLOUD_INITIALIZED_KEY = "karaokeSharedCloudInitializedV2";
+const CLOUD_LAST_SYNC_KEY = "karaokeSharedCloudLastSyncV2";
+const CLOUD_BASELINE_KEY = "karaokeSharedCloudBaselinesV2";
+const CLOUD_LAST_RESULT_KEY = "karaokeSharedCloudLastResultV2";
 const BACKUP_LAST_AT_KEY = "karaokeManagerLastBackupAtV1";
 const AUTO_SYNC_MIN_INTERVAL_MS = 10000;
+const CLOUD_TABLE = "shared_songs";
+const AUTO_PULL_INTERVAL_MS = 15000;
 
 let cloudAuth = null;
 let cloudSyncInProgress = false;
@@ -52,6 +54,7 @@ const els = {
   songCount: document.querySelector("#songCount"),
   songList: document.querySelector("#songList"),
   searchInput: document.querySelector("#searchInput"),
+  mobileSearchInput: document.querySelector("#mobileSearchInput"),
   sortSelect: document.querySelector("#sortSelect"),
   sortSelect2: document.querySelector("#sortSelect2"),
   sortSelect3: document.querySelector("#sortSelect3"),
@@ -614,31 +617,21 @@ function clearTombstone(id) {
   saveTombstones(data);
 }
 
-function cloudHeaders(accessToken = null) {
-  const headers = {
+function cloudHeaders() {
+  return {
     "apikey": SUPABASE_PUBLISHABLE_KEY,
     "Content-Type": "application/json"
   };
-  const token = accessToken || cloudAuth?.access_token;
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  return headers;
 }
 
-async function cloudFetch(path, options = {}, allowRefresh = true) {
-  const response = await fetch(`${SUPABASE_URL}${path}`, {
+async function cloudFetch(path, options = {}) {
+  return fetch(`${SUPABASE_URL}${path}`, {
     ...options,
     headers: {
       ...cloudHeaders(),
       ...(options.headers || {})
     }
   });
-
-  if (response.status === 401 && allowRefresh && cloudAuth?.refresh_token) {
-    const refreshed = await refreshCloudSession();
-    if (refreshed) return cloudFetch(path, options, false);
-  }
-
-  return response;
 }
 
 async function loginCloud(email, password) {
@@ -703,7 +696,6 @@ async function validateCloudSession() {
 function cloudSongFromLocal(song) {
   return {
     id: song.id,
-    user_id: cloudAuth.user.id,
     title: song.title,
     artist: song.artist,
     key: song.key === "" || song.key === null || song.key === undefined ? null : Number(song.key),
@@ -813,11 +805,9 @@ async function findCloudNaturalDuplicate(song) {
 }
 
 async function cloudUpsertSong(song) {
-  if (!cloudAuth?.user?.id) return false;
-
   let targetSong = song;
 
-  const doUpsert = currentSong => cloudFetch("/rest/v1/songs?on_conflict=id", {
+  const doUpsert = currentSong => cloudFetch(`/rest/v1/${CLOUD_TABLE}?on_conflict=id`, {
     method: "POST",
     headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
     body: JSON.stringify(cloudSongFromLocal(currentSong))
@@ -827,7 +817,7 @@ async function cloudUpsertSong(song) {
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    const naturalConflict = response.status === 409 && text.includes("songs_unique_song_key");
+    const naturalConflict = response.status === 409;
 
     if (!naturalConflict) {
       throw new Error(text || `同期エラー (${response.status})`);
@@ -865,9 +855,7 @@ async function cloudUpsertSong(song) {
 }
 
 async function cloudDeleteSong(id) {
-  if (!cloudAuth?.user?.id) return false;
-
-  const response = await cloudFetch(`/rest/v1/songs?id=eq.${encodeURIComponent(id)}`, {
+  const response = await cloudFetch(`/rest/v1/${CLOUD_TABLE}?id=eq.${encodeURIComponent(id)}`, {
     method: "DELETE",
     headers: { "Prefer": "return=minimal" }
   });
@@ -884,10 +872,8 @@ async function cloudDeleteSong(id) {
 }
 
 async function fetchCloudSongs() {
-  if (!cloudAuth?.user?.id) return [];
-
   const response = await cloudFetch(
-    "/rest/v1/songs?select=*&order=updated_at.asc",
+    `/rest/v1/${CLOUD_TABLE}?select=*&order=updated_at.asc`,
     { method: "GET" }
   );
 
@@ -945,7 +931,7 @@ async function uploadAllLocalSongs() {
 }
 
 async function syncCloud({ silent = false, reason = "manual" } = {}) {
-  if (!cloudAuth?.user?.id || cloudSyncInProgress) return false;
+  if (!navigator.onLine || cloudSyncInProgress) return false;
 
   cloudSyncInProgress = true;
   updateCloudUI("syncing");
@@ -1180,45 +1166,33 @@ function setCloudMessage(text) {
 }
 
 function updateCloudUI(state = null) {
-  const loggedIn = !!cloudAuth?.user?.id;
-  els.cloudLoggedOutPanel?.classList.toggle("hidden", loggedIn);
-  els.cloudLoggedInPanel?.classList.toggle("hidden", !loggedIn);
+  els.cloudLoggedOutPanel?.classList.add("hidden");
+  els.cloudLoggedInPanel?.classList.remove("hidden");
 
-  if (loggedIn) {
-    els.cloudBtnText.textContent = "同期";
-    els.cloudBtn.classList.add("cloud-connected");
-    els.cloudUserEmail.textContent = cloudAuth.user.email || "ログイン中";
+  if (els.cloudBtnText) els.cloudBtnText.textContent = "同期";
+  els.cloudBtn?.classList.add("cloud-connected");
+  if (els.cloudUserEmail) els.cloudUserEmail.textContent = "ログイン不要・全端末で共有";
 
-    const last = localStorage.getItem(CLOUD_LAST_SYNC_KEY);
-    els.cloudLastSync.textContent = last ? formatDateTime(last) : "まだ";
-    if (els.cloudLastResult) {
-      els.cloudLastResult.textContent = formatSyncResult(loadSyncResult());
-    }
-  } else {
-    els.cloudBtnText.textContent = "クラウド";
-    els.cloudBtn.classList.remove("cloud-connected");
-  }
+  const last = localStorage.getItem(CLOUD_LAST_SYNC_KEY);
+  if (els.cloudLastSync) els.cloudLastSync.textContent = last ? formatDateTime(last) : "まだ";
+  if (els.cloudLastResult) els.cloudLastResult.textContent = formatSyncResult(loadSyncResult());
 
   if (state === "syncing") {
-    els.cloudSyncState.textContent = "同期中…";
-    els.cloudSyncNowBtn.disabled = true;
+    if (els.cloudSyncState) els.cloudSyncState.textContent = "同期中…";
+    if (els.cloudSyncNowBtn) els.cloudSyncNowBtn.disabled = true;
   } else if (state === "error") {
-    els.cloudSyncState.textContent = "要確認";
-    els.cloudSyncNowBtn.disabled = false;
-  } else if (loggedIn) {
+    if (els.cloudSyncState) els.cloudSyncState.textContent = "要確認";
+    if (els.cloudSyncNowBtn) els.cloudSyncNowBtn.disabled = false;
+  } else {
     const dirty = getDirtyIds().size + Object.keys(getTombstones()).length;
-    els.cloudSyncState.textContent = dirty ? `未同期 ${dirty}件` : "同期済み";
-    els.cloudSyncNowBtn.disabled = false;
+    if (els.cloudSyncState) els.cloudSyncState.textContent = dirty ? `未同期 ${dirty}件` : "自動同期中";
+    if (els.cloudSyncNowBtn) els.cloudSyncNowBtn.disabled = false;
   }
 }
 
 function openCloudDialog() {
   updateCloudUI();
-  els.cloudLoginError.textContent = "";
   els.cloudDialog.showModal();
-  if (!cloudAuth?.user?.id) {
-    setTimeout(() => els.cloudEmailInput.focus(), 0);
-  }
 }
 
 async function logoutCloud() {
@@ -2542,6 +2516,11 @@ function render() {
         ? `自信 ${song.confidence}`
         : "";
 
+    const confidenceSide = node.querySelector(".confidence-side");
+    if (confidenceSide) {
+      confidenceSide.textContent = song.confidence ? String(song.confidence).toUpperCase() : "";
+    }
+
     node.querySelector(".play-count-badge").textContent = `歌唱 ${playCountOf(song)}回`;
     node.querySelector(".missed-badge").textContent = missedLabel(song);
 
@@ -3699,7 +3678,7 @@ async function importCSV(file) {
 
 
 function scheduleCloudSync(reason = "local-change", delay = 350) {
-  if (!cloudAuth?.user?.id || !navigator.onLine) return;
+  if (!navigator.onLine) return;
 
   if (cloudSyncTimer) clearTimeout(cloudSyncTimer);
   cloudSyncTimer = setTimeout(() => {
@@ -3710,7 +3689,7 @@ function scheduleCloudSync(reason = "local-change", delay = 350) {
 
 
 function requestAutoSync(reason = "resume") {
-  if (!cloudAuth?.user?.id || !navigator.onLine || cloudSyncInProgress) return;
+  if (!navigator.onLine || cloudSyncInProgress) return;
 
   const now = Date.now();
   if (now - lastAutoSyncAttempt < AUTO_SYNC_MIN_INTERVAL_MS) return;
@@ -3742,6 +3721,7 @@ function updateSortPriorityVisibility(changedIndex = null) {
 
 function resetSearchAndFilters() {
   els.searchInput.value = "";
+  if (els.mobileSearchInput) els.mobileSearchInput.value = "";
   currentFilter = "all";
 
   document.querySelectorAll(".filter-chip").forEach(button => {
@@ -3845,47 +3825,7 @@ function bindEvents() {
   });
   els.closeCloudDialogBtn.addEventListener("click", () => els.cloudDialog.close());
 
-  els.cloudLoginBtn.addEventListener("click", async () => {
-    const email = els.cloudEmailInput.value.trim();
-    const password = els.cloudPasswordInput.value;
-
-    els.cloudLoginError.textContent = "";
-    if (!email || !password) {
-      els.cloudLoginError.textContent = "メールアドレスとパスワードを入力してください。";
-      return;
-    }
-
-    els.cloudLoginBtn.disabled = true;
-    els.cloudLoginBtn.textContent = "ログイン中…";
-
-    try {
-      await loginCloud(email, password);
-      els.cloudPasswordInput.value = "";
-      setCloudMessage("ログインしました。初回同期を開始します…");
-      updateCloudUI("syncing");
-      await syncCloud({ silent: true, reason: "login" });
-      setCloudMessage("クラウド同期の準備ができました。");
-    } catch (error) {
-      els.cloudLoginError.textContent = readableCloudError(error);
-    } finally {
-      els.cloudLoginBtn.disabled = false;
-      els.cloudLoginBtn.textContent = "ログインして同期";
-      updateCloudUI();
-    }
-  });
-
-  els.cloudPasswordInput.addEventListener("keydown", event => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      els.cloudLoginBtn.click();
-    }
-  });
-
   els.cloudSyncNowBtn.addEventListener("click", () => syncCloud({ reason: "manual" }));
-  els.cloudLogoutBtn.addEventListener("click", async () => {
-    if (!confirm("クラウドからログアウトしますか？\n端末内の曲データは削除されません。")) return;
-    await logoutCloud();
-  });
 
   window.addEventListener("online", () => requestAutoSync("online"));
 
@@ -3998,7 +3938,14 @@ function bindEvents() {
     await saveForm();
   });
 
-  els.searchInput.addEventListener("input", render);
+  els.searchInput.addEventListener("input", () => {
+    if (els.mobileSearchInput) els.mobileSearchInput.value = els.searchInput.value;
+    render();
+  });
+  els.mobileSearchInput?.addEventListener("input", () => {
+    els.searchInput.value = els.mobileSearchInput.value;
+    render();
+  });
   [els.sortSelect, els.sortSelect2, els.sortSelect3, els.sortSelect4, els.sortSelect5].forEach((select, index) => {
     select?.addEventListener("change", () => {
       updateSortPriorityVisibility(index);
@@ -4091,8 +4038,11 @@ function bindEvents() {
         els.fastSongSearchInput.focus();
         els.fastSongSearchInput.select();
       } else {
-        els.searchInput.focus();
-        els.searchInput.select();
+        const target = window.matchMedia("(max-width: 640px)").matches && els.mobileSearchInput
+          ? els.mobileSearchInput
+          : els.searchInput;
+        target.focus();
+        target.select();
       }
     }
 
@@ -4164,17 +4114,18 @@ async function init() {
   els.sortSelect5.value = "";
   updateSortPriorityVisibility();
 
-  loadCloudAuth();
   updateCloudUI();
   updateBackupStatus();
   render();
 
-  if (cloudAuth?.access_token) {
-    const valid = await validateCloudSession();
-    if (valid && navigator.onLine) {
-      syncCloud({ silent: true, reason: "startup" });
-    }
+  if (navigator.onLine) {
+    await syncCloud({ silent: true, reason: "startup" });
   }
+
+  // While the app is open, periodically pull changes made on another device.
+  setInterval(() => {
+    if (document.visibilityState === "visible") requestAutoSync("periodic");
+  }, AUTO_PULL_INTERVAL_MS);
 
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
     try {

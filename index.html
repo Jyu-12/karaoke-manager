@@ -18,7 +18,7 @@
     <div>
       <div class="brand-row">
         <p class="eyebrow">KARAOKE MANAGER</p>
-        <span id="appVersion" class="version-badge">v31</span>
+        <span id="appVersion" class="version-badge">v33</span>
         <button id="checkUpdateBtn" class="update-check-btn" type="button" title="最新版を確認">↻ 更新</button>
       </div>
       <h1>曲管理</h1>
@@ -57,8 +57,13 @@
       </div>
     </section>
 
+    <label class="search-box mobile-sticky-search">
+      <span>🔎</span>
+      <input id="mobileSearchInput" type="search" placeholder="曲名・アーティスト・タグを検索">
+    </label>
+
     <section class="controls">
-      <label class="search-box">
+      <label class="search-box desktop-search-box">
         <span>🔎</span>
         <input id="searchInput" type="search" placeholder="曲名・アーティスト・タグを検索">
       </label>
@@ -261,42 +266,29 @@
     <div class="cloud-card">
       <div class="dialog-head">
         <div>
-          <p class="eyebrow">CLOUD SYNC</p>
+          <p class="eyebrow">AUTO CLOUD SYNC</p>
           <h2>クラウド同期</h2>
         </div>
         <button type="button" id="closeCloudDialogBtn" class="icon-btn" aria-label="閉じる">✕</button>
       </div>
 
-      <div id="cloudLoggedOutPanel" class="cloud-panel">
+      <div id="cloudLoggedOutPanel" class="cloud-panel hidden"></div>
+
+      <div id="cloudLoggedInPanel" class="cloud-panel">
         <p class="cloud-description">
-          Supabaseにログインすると、Windows・iPhone・Androidなどで同じ曲データを共有できます。
+          ログイン不要で、PC・iPhone・Androidの曲データを自動共有します。
+          起動時・アプリ復帰時・編集後に自動同期します。
         </p>
 
-        <label>
-          メールアドレス
-          <input id="cloudEmailInput" type="email" autocomplete="username" placeholder="example@example.com">
-        </label>
-
-        <label>
-          パスワード
-          <input id="cloudPasswordInput" type="password" autocomplete="current-password" placeholder="パスワード">
-        </label>
-
-        <p id="cloudLoginError" class="form-error" role="alert"></p>
-
-        <button type="button" id="cloudLoginBtn" class="primary-btn">ログインして同期</button>
-      </div>
-
-      <div id="cloudLoggedInPanel" class="cloud-panel hidden">
         <div class="cloud-account">
-          <span>ログイン中</span>
-          <strong id="cloudUserEmail">—</strong>
+          <span>共有方式</span>
+          <strong id="cloudUserEmail">ログイン不要・全端末で共有</strong>
         </div>
 
         <div class="cloud-sync-summary">
           <div>
             <span>状態</span>
-            <strong id="cloudSyncState">同期済み</strong>
+            <strong id="cloudSyncState">自動同期中</strong>
           </div>
           <div>
             <span>最終同期</span>
@@ -311,8 +303,7 @@
         <p id="cloudSyncMessage" class="cloud-description"></p>
 
         <div class="cloud-actions">
-          <button type="button" id="cloudSyncNowBtn" class="primary-btn">今すぐ同期</button>
-          <button type="button" id="cloudLogoutBtn" class="ghost-btn">ログアウト</button>
+          <button type="button" id="cloudSyncNowBtn" class="primary-btn">今すぐ再同期</button>
         </div>
       </div>
     </div>
@@ -776,6 +767,7 @@
           <span class="missed-badge"></span>
         </div>
         <div class="tag-row"></div>
+        <span class="confidence-side" aria-hidden="true"></span>
       </button>
     </article>
   </template>

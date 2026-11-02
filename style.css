@@ -2825,3 +2825,78 @@ html[data-theme="light"] .filter-chip.active {
     min-height: 46px;
   }
 }
+
+
+/* v32: sticky mobile search + cleaner mobile song rows with confidence rank on the right */
+.mobile-sticky-search {
+  display: none;
+}
+
+.confidence-side {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .mobile-sticky-search {
+    position: sticky;
+    top: calc(env(safe-area-inset-top) + 4px);
+    z-index: 40;
+    display: flex;
+    margin: 0 0 7px;
+    padding: 0 10px;
+    border-color: color-mix(in srgb, var(--line) 86%, transparent);
+    background: color-mix(in srgb, var(--panel) 94%, transparent);
+    box-shadow: 0 6px 18px rgba(0,0,0,.20);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .mobile-sticky-search input {
+    padding: 10px 0;
+    font-size: 16px;
+  }
+
+  .controls > .desktop-search-box {
+    display: none;
+  }
+
+  .song-card {
+    min-height: 48px;
+  }
+
+  .song-main {
+    position: relative;
+    padding-right: 48px;
+  }
+
+  .confidence-side {
+    position: absolute;
+    top: 50%;
+    right: 9px;
+    display: block;
+    min-width: 30px;
+    transform: translateY(-50%);
+    text-align: center;
+    font-size: 25px;
+    line-height: 1;
+    font-weight: 850;
+    letter-spacing: -.02em;
+    color: var(--text);
+  }
+
+  .confidence-side:empty {
+    display: none;
+  }
+
+  .meta-row {
+    display: none;
+  }
+
+  .song-artist {
+    margin-bottom: 1px;
+  }
+
+  .tag-row:empty {
+    display: none;
+  }
+}

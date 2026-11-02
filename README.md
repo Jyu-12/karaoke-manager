@@ -1,3 +1,5 @@
+# Karaoke Manager PWA - v35 Tag Background Colors
+
 # Karaoke Manager PWA - v12 Cloud Sync
 
 ## v12: Supabaseクラウド同期
@@ -264,3 +266,11 @@ URLを個人利用する前提の簡易構成です。機密情報の保存に�
 - 曲一覧では歌唱回数・未歌唱回数を非表示
 - 曲名 / アーティスト / キー / タグをコンパクト表示
 - v33 のログイン不要・端末間自動共有はそのまま継続
+
+
+## v35 変更点
+- タグ管理画面で各タグの背景色をカラーピッカーから設定できます。
+- 「自動」で従来の自動配色へ戻せます。
+- ユーザー設定で変わるのは背景色だけです。文字色・枠線は従来仕様のままです。
+- タグ背景色は Supabase の `shared_app_settings` に保存し、PC・スマホ間で自動同期します。
+- 初回のみ `supabase_tag_colors_setup.sql` を Supabase SQL Editor で実行してください。

@@ -2983,3 +2983,50 @@ html[data-theme="light"] .filter-chip.active {
 .confidence-side:empty {
   display: none;
 }
+
+
+/* v35: user-selectable tag background colors */
+.tag-bg-color-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tag-bg-color-input {
+  width: 34px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.tag-bg-color-input::-webkit-color-swatch-wrapper { padding: 2px; }
+.tag-bg-color-input::-webkit-color-swatch { border: 1px solid var(--line); border-radius: 7px; }
+.tag-bg-color-input::-moz-color-swatch { border: 1px solid var(--line); border-radius: 7px; }
+
+.tag-color-auto-btn:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+@media (max-width: 720px) {
+  .tag-manager-actions {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 6px;
+  }
+
+  .tag-bg-color-control {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+  }
+}

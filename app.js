@@ -1,4 +1,4 @@
-const APP_VERSION = "v34";
+const APP_VERSION = "v35";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -18,6 +18,9 @@ let fastScoreSearchMatches = [];
 
 const QUICK_TAGS_KEY = "karaokeManagerQuickTagsV1";
 const THEME_KEY = "karaokeManagerThemeV1";
+const TAG_COLORS_KEY = "karaokeManagerTagBackgroundColorsV1";
+const TAG_COLORS_DIRTY_KEY = "karaokeManagerTagBackgroundColorsDirtyV1";
+const TAG_COLORS_UPDATED_AT_KEY = "karaokeManagerTagBackgroundColorsUpdatedAtV1";
 const SESSION_HOURS = 12;
 
 const SUPABASE_URL = "https://zrihlqlqgpbmtlhigceb.supabase.co";
@@ -32,6 +35,8 @@ const CLOUD_LAST_RESULT_KEY = "karaokeSharedCloudLastResultV2";
 const BACKUP_LAST_AT_KEY = "karaokeManagerLastBackupAtV1";
 const AUTO_SYNC_MIN_INTERVAL_MS = 10000;
 const CLOUD_TABLE = "shared_songs";
+const CLOUD_SETTINGS_TABLE = "shared_app_settings";
+const TAG_COLORS_SETTINGS_KEY = "tag_background_colors";
 const AUTO_PULL_INTERVAL_MS = 15000;
 
 let cloudAuth = null;
@@ -886,6 +891,75 @@ async function fetchCloudSongs() {
   return Array.isArray(rows) ? rows.map(localSongFromCloud) : [];
 }
 
+
+async function fetchCloudTagBackgroundColors() {
+  const response = await cloudFetch(
+    `/rest/v1/${CLOUD_SETTINGS_TABLE}?key=eq.${encodeURIComponent(TAG_COLORS_SETTINGS_KEY)}&select=key,value,updated_at&limit=1`,
+    { method: "GET" }
+  );
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(text || `タグ色設定の取得エラー (${response.status})`);
+  }
+
+  const rows = await response.json().catch(() => []);
+  const row = Array.isArray(rows) ? rows[0] : null;
+  return row || null;
+}
+
+async function upsertCloudTagBackgroundColors(colors) {
+  const now = new Date().toISOString();
+  const response = await cloudFetch(`/rest/v1/${CLOUD_SETTINGS_TABLE}?on_conflict=key`, {
+    method: "POST",
+    headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({
+      key: TAG_COLORS_SETTINGS_KEY,
+      value: colors || {},
+      updated_at: now
+    })
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(text || `タグ色設定の保存エラー (${response.status})`);
+  }
+  localStorage.setItem(TAG_COLORS_UPDATED_AT_KEY, now);
+  localStorage.removeItem(TAG_COLORS_DIRTY_KEY);
+}
+
+async function syncTagBackgroundColors() {
+  try {
+    const remote = await fetchCloudTagBackgroundColors();
+    const local = getTagBackgroundColors();
+    const dirty = localStorage.getItem(TAG_COLORS_DIRTY_KEY) === "1";
+
+    if (dirty) {
+      await upsertCloudTagBackgroundColors(local);
+      return true;
+    }
+
+    if (!remote) {
+      if (Object.keys(local).length) await upsertCloudTagBackgroundColors(local);
+      return true;
+    }
+
+    const remoteTime = new Date(remote.updated_at || 0).getTime();
+    const localTime = new Date(localStorage.getItem(TAG_COLORS_UPDATED_AT_KEY) || 0).getTime();
+    if (remoteTime >= localTime) {
+      saveTagBackgroundColors(remote.value || {}, { markDirty: false });
+      localStorage.setItem(TAG_COLORS_UPDATED_AT_KEY, remote.updated_at || new Date().toISOString());
+      renderQuickTagButtons();
+      render();
+      if (els.tagManagerDialog?.open) renderTagManager();
+    }
+    return true;
+  } catch (error) {
+    console.warn("Tag background color sync skipped:", error);
+    return false;
+  }
+}
+
 async function putSongLocalOnly(song) {
   suppressCloudWrite = true;
   try {
@@ -1127,6 +1201,8 @@ async function syncCloud({ silent = false, reason = "manual" } = {}) {
       render();
     }
 
+    await syncTagBackgroundColors();
+
     const now = new Date().toISOString();
     result.at = now;
     localStorage.setItem(CLOUD_LAST_SYNC_KEY, now);
@@ -1276,6 +1352,7 @@ function normalizeText(value) {
 
 
 const TAG_COLOR_COUNT = 10;
+const TAG_AUTO_HUES = [8, 32, 55, 112, 158, 188, 216, 252, 292, 332];
 
 function tagColorIndex(tag) {
   const text = normalizeText(tag);
@@ -1289,6 +1366,87 @@ function tagColorIndex(tag) {
   return Math.abs(hash >>> 0) % TAG_COLOR_COUNT;
 }
 
+function normalizeHexColor(value) {
+  const text = String(value || "").trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(text) ? text : "";
+}
+
+function getTagBackgroundColors() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(TAG_COLORS_KEY) || "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const clean = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      const color = normalizeHexColor(value);
+      if (key && color) clean[key] = color;
+    }
+    return clean;
+  } catch {
+    return {};
+  }
+}
+
+function saveTagBackgroundColors(colors, { markDirty = false } = {}) {
+  const clean = {};
+  for (const [key, value] of Object.entries(colors || {})) {
+    const color = normalizeHexColor(value);
+    if (key && color) clean[key] = color;
+  }
+  localStorage.setItem(TAG_COLORS_KEY, JSON.stringify(clean));
+  if (markDirty) {
+    localStorage.setItem(TAG_COLORS_DIRTY_KEY, "1");
+    localStorage.setItem(TAG_COLORS_UPDATED_AT_KEY, new Date().toISOString());
+    scheduleCloudSync("tag-color", 350);
+  }
+  return clean;
+}
+
+function getTagBackgroundColor(tag) {
+  return getTagBackgroundColors()[normalizeText(tag)] || "";
+}
+
+function hslToHex(h, s, l) {
+  s /= 100;
+  l /= 100;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+  const m = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  const toHex = n => Math.round((n + m) * 255).toString(16).padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function autoTagPreviewColor(tag) {
+  const hue = TAG_AUTO_HUES[tagColorIndex(tag)] ?? 216;
+  return hslToHex(hue, 64, 78);
+}
+
+function refreshTagBackgroundColor(tag) {
+  const key = normalizeText(tag);
+  document.querySelectorAll("[data-tag-color-key]").forEach(element => {
+    if (element.dataset.tagColorKey === key) applyTagColor(element, tag);
+  });
+}
+
+function setTagBackgroundColor(tag, color) {
+  const key = normalizeText(tag);
+  if (!key) return;
+  const colors = getTagBackgroundColors();
+  const normalized = normalizeHexColor(color);
+  if (normalized) colors[key] = normalized;
+  else delete colors[key];
+  saveTagBackgroundColors(colors, { markDirty: true });
+  refreshTagBackgroundColor(tag);
+  renderQuickTagButtons();
+  render();
+}
+
 function applyTagColor(element, tag) {
   if (!element) return element;
 
@@ -1296,7 +1454,15 @@ function applyTagColor(element, tag) {
     element.classList.remove(`tag-color-${i}`);
   }
 
+  const key = normalizeText(tag);
+  element.dataset.tagColorKey = key;
   element.classList.add("tag-colored", `tag-color-${tagColorIndex(tag)}`);
+  element.style.removeProperty("background-color");
+
+  const custom = getTagBackgroundColor(tag);
+  if (custom) {
+    element.style.setProperty("background-color", custom, "important");
+  }
   return element;
 }
 
@@ -3272,6 +3438,16 @@ async function cleanupUnusedTags() {
   const nextQuickTags = getQuickTags().filter(tag => !unusedKeys.has(normalizeText(tag)));
   saveQuickTags(nextQuickTags);
 
+  const tagColors = getTagBackgroundColors();
+  let colorsChanged = false;
+  for (const key of unusedKeys) {
+    if (tagColors[key]) {
+      delete tagColors[key];
+      colorsChanged = true;
+    }
+  }
+  if (colorsChanged) saveTagBackgroundColors(tagColors, { markDirty: true });
+
   renderQuickTagButtons();
   renderTagManager();
 }
@@ -3338,6 +3514,42 @@ function renderTagManager() {
     const actions = document.createElement("div");
     actions.className = "tag-manager-actions";
 
+    const colorWrap = document.createElement("label");
+    colorWrap.className = "tag-bg-color-control";
+    colorWrap.title = "タグの背景色";
+
+    const colorLabel = document.createElement("span");
+    colorLabel.textContent = "背景色";
+
+    const colorInput = document.createElement("input");
+    colorInput.type = "color";
+    colorInput.className = "tag-bg-color-input";
+    colorInput.value = getTagBackgroundColor(entry.name) || autoTagPreviewColor(entry.name);
+    colorInput.setAttribute("aria-label", `${entry.name}の背景色`);
+    colorInput.addEventListener("input", () => {
+      const colors = getTagBackgroundColors();
+      colors[normalizeText(entry.name)] = normalizeHexColor(colorInput.value);
+      saveTagBackgroundColors(colors, { markDirty: true });
+      applyTagColor(name, entry.name);
+      renderQuickTagButtons();
+      render();
+      autoBtn.disabled = false;
+    });
+
+    const autoBtn = document.createElement("button");
+    autoBtn.type = "button";
+    autoBtn.className = "ghost-btn small-btn tag-color-auto-btn";
+    autoBtn.textContent = "自動";
+    autoBtn.disabled = !getTagBackgroundColor(entry.name);
+    autoBtn.addEventListener("click", () => {
+      setTagBackgroundColor(entry.name, "");
+      colorInput.value = autoTagPreviewColor(entry.name);
+      autoBtn.disabled = true;
+      applyTagColor(name, entry.name);
+    });
+
+    colorWrap.append(colorLabel, colorInput);
+
     const renameBtn = document.createElement("button");
     renameBtn.type = "button";
     renameBtn.className = "ghost-btn small-btn";
@@ -3350,7 +3562,7 @@ function renderTagManager() {
     deleteBtn.textContent = "削除";
     deleteBtn.addEventListener("click", () => deleteTag(entry.name));
 
-    actions.append(renameBtn, deleteBtn);
+    actions.append(colorWrap, autoBtn, renameBtn, deleteBtn);
     row.append(info, actions);
     els.tagManagerList.append(row);
   }
@@ -3368,6 +3580,13 @@ async function renameTag(oldName) {
 
   const oldKey = normalizeText(oldName);
   const nextKey = normalizeText(nextName);
+
+  const tagColors = getTagBackgroundColors();
+  if (oldKey !== nextKey && tagColors[oldKey]) {
+    if (!tagColors[nextKey]) tagColors[nextKey] = tagColors[oldKey];
+    delete tagColors[oldKey];
+    saveTagBackgroundColors(tagColors, { markDirty: true });
+  }
 
   for (const song of songs) {
     const original = parseTags(song.tags);
@@ -3414,6 +3633,12 @@ async function deleteTag(tagName) {
   const quick = getQuickTags().filter(tag => normalizeText(tag) !== target);
   saveQuickTags(quick);
 
+  const tagColors = getTagBackgroundColors();
+  if (tagColors[target]) {
+    delete tagColors[target];
+    saveTagBackgroundColors(tagColors, { markDirty: true });
+  }
+
   songs = await getAllSongs();
   els.tagFilterSelect.value = "";
   render();
@@ -3456,11 +3681,12 @@ function updateBackupStatus() {
 function exportJSON() {
   const data = {
     app: "Karaoke Manager",
-    version: 22,
+    version: 35,
     exportedAt: new Date().toISOString(),
     songs,
     settings: {
       quickTags: getQuickTags(),
+      tagBackgroundColors: getTagBackgroundColors(),
       theme: localStorage.getItem(THEME_KEY) || "system"
     }
   };
@@ -3539,6 +3765,9 @@ async function importJSON(file) {
 
     if (parsed?.settings?.quickTags && Array.isArray(parsed.settings.quickTags)) {
       saveQuickTags(parsed.settings.quickTags);
+    }
+    if (parsed?.settings?.tagBackgroundColors && typeof parsed.settings.tagBackgroundColors === "object") {
+      saveTagBackgroundColors(parsed.settings.tagBackgroundColors, { markDirty: true });
     }
     if (parsed?.settings?.theme) {
       applyTheme(parsed.settings.theme);

@@ -1,4 +1,4 @@
-const CACHE_NAME = "karaoke-manager-v34-unified-song-cards";
+const CACHE_NAME = "karaoke-manager-v35-tag-background-colors";
 
 const CORE_ASSETS = [
   "./",

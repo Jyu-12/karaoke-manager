@@ -1,4 +1,4 @@
-const APP_VERSION = "v33";
+const APP_VERSION = "v34";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";

@@ -18,7 +18,7 @@
     <div>
       <div class="brand-row">
         <p class="eyebrow">KARAOKE MANAGER</p>
-        <span id="appVersion" class="version-badge">v39</span>
+        <span id="appVersion" class="version-badge">v42</span>
         <button id="checkUpdateBtn" class="update-check-btn" type="button" title="最新版を確認">↻ 更新</button>
       </div>
       <div class="mode-switch" role="group" aria-label="アプリモード">
@@ -51,6 +51,9 @@
         <span class="summary-label">登録曲数</span>
         <strong id="songCount">0</strong>
       </div>
+      <button id="playlistOpenBtn" class="ghost-btn playlist-open-btn" type="button">
+        ▶ 次に歌う <span id="playlistCountBadge" class="playlist-count-badge">0</span>
+      </button>
       <div class="summary-actions">
         <button id="fastScoreBtn" class="primary-btn mobile-more-source">🎤 採点入力</button>
         <button id="multiSelectBtn" class="ghost-btn">☑ 複数選択</button>
@@ -292,6 +295,7 @@
         <button type="button" id="mobileStatsBtn" class="mobile-more-item">📊 <span>統計</span></button>
         <button type="button" id="mobileManageTagsBtn" class="mobile-more-item">🏷 <span>タグ管理</span></button>
         <button type="button" id="mobileRandomBtn" class="mobile-more-item">🎲 <span>ランダム選曲</span></button>
+        <button type="button" id="mobilePlaylistBtn" class="mobile-more-item">▶ <span>次に歌う</span></button>
         <button type="button" id="mobileCloudBtn" class="mobile-more-item">☁ <span>クラウド</span></button>
 
         <label class="mobile-more-artist">
@@ -309,6 +313,32 @@
             <option value="dark">ダーク</option>
           </select>
         </label>
+      </div>
+    </div>
+  </dialog>
+
+
+  <dialog id="playlistDialog" class="playlist-dialog">
+    <div class="playlist-card">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">UP NEXT</p>
+          <h2>次に歌う</h2>
+        </div>
+        <button type="button" id="closePlaylistBtn" class="icon-btn" aria-label="閉じる">✕</button>
+      </div>
+
+      <div class="playlist-summary-line">
+        <strong id="playlistTitle">次に歌う</strong>
+        <span id="playlistMeta">0曲</span>
+      </div>
+
+      <div id="playlistSongList" class="playlist-song-list"></div>
+
+      <div class="dialog-actions">
+        <button type="button" id="clearPlaylistBtn" class="ghost-btn">中身を空にする</button>
+        <span class="spacer"></span>
+        <button type="button" id="playlistDoneBtn" class="primary-btn">閉じる</button>
       </div>
     </div>
   </dialog>
@@ -846,6 +876,7 @@
     <article class="song-card">
       <button type="button" class="select-song-btn hidden" aria-label="曲を選択" aria-pressed="false">✓</button>
       <button class="favorite-btn" aria-label="お気に入り切替">☆</button>
+      <button type="button" class="playlist-add-btn" aria-label="プレイリストに追加" title="プレイリストに追加">＋</button>
       <button class="song-main">
         <div class="song-title-row">
           <h3 class="song-title"></h3>

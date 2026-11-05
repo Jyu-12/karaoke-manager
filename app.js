@@ -1,4 +1,4 @@
-const APP_VERSION = "v39";
+const APP_VERSION = "v42";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -26,6 +26,7 @@ const APP_MODE_KEY = "karaokeManagerAppModeV1";
 const savedAppMode = localStorage.getItem(APP_MODE_KEY);
 let appMode = ["score", "manage", "view"].includes(savedAppMode) ? savedAppMode : "manage";
 let scoreModeSongId = null;
+let playlistPickerSongId = null;
 
 const SUPABASE_URL = "https://zrihlqlqgpbmtlhigceb.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_9OK0z69_4ZSo_RVX9WXXfQ_x7nMOWEk";
@@ -41,6 +42,10 @@ const AUTO_SYNC_MIN_INTERVAL_MS = 10000;
 const CLOUD_TABLE = "shared_songs";
 const CLOUD_SETTINGS_TABLE = "shared_app_settings";
 const TAG_COLORS_SETTINGS_KEY = "tag_background_colors";
+const PLAYLISTS_SETTINGS_KEY = "playlists_v1";
+const PLAYLISTS_KEY = "karaokeManagerPlaylistsV1";
+const PLAYLISTS_DIRTY_KEY = "karaokeManagerPlaylistsDirtyV1";
+const PLAYLISTS_UPDATED_AT_KEY = "karaokeManagerPlaylistsUpdatedAtV1";
 const AUTO_PULL_INTERVAL_MS = 15000;
 
 let cloudAuth = null;
@@ -112,6 +117,25 @@ const els = {
   continuousAddBtn: document.querySelector("#continuousAddBtn"),
   cloudBtn: document.querySelector("#cloudBtn"),
   cloudBtnText: document.querySelector("#cloudBtnText"),
+  playlistOpenBtn: document.querySelector("#playlistOpenBtn"),
+  playlistCountBadge: document.querySelector("#playlistCountBadge"),
+  playlistDialog: document.querySelector("#playlistDialog"),
+  closePlaylistBtn: document.querySelector("#closePlaylistBtn"),
+  playlistDoneBtn: document.querySelector("#playlistDoneBtn"),
+  playlistSelect: document.querySelector("#playlistSelect"),
+  playlistTitle: document.querySelector("#playlistTitle"),
+  playlistMeta: document.querySelector("#playlistMeta"),
+  playlistSongList: document.querySelector("#playlistSongList"),
+  newPlaylistBtn: document.querySelector("#newPlaylistBtn"),
+  renamePlaylistBtn: document.querySelector("#renamePlaylistBtn"),
+  deletePlaylistBtn: document.querySelector("#deletePlaylistBtn"),
+  clearPlaylistBtn: document.querySelector("#clearPlaylistBtn"),
+  playlistPickerDialog: document.querySelector("#playlistPickerDialog"),
+  closePlaylistPickerBtn: document.querySelector("#closePlaylistPickerBtn"),
+  playlistPickerDoneBtn: document.querySelector("#playlistPickerDoneBtn"),
+  playlistPickerSong: document.querySelector("#playlistPickerSong"),
+  playlistPickerList: document.querySelector("#playlistPickerList"),
+  mobilePlaylistBtn: document.querySelector("#mobilePlaylistBtn"),
   checkUpdateBtn: document.querySelector("#checkUpdateBtn"),
   cloudDialog: document.querySelector("#cloudDialog"),
   closeCloudDialogBtn: document.querySelector("#closeCloudDialogBtn"),
@@ -1360,6 +1384,7 @@ async function syncCloud({ silent = false, reason = "manual" } = {}) {
     }
 
     await syncTagBackgroundColors();
+    await syncPlaylists();
 
     const now = new Date().toISOString();
     result.at = now;
@@ -1490,6 +1515,7 @@ async function putSong(song) {
 
 async function removeSong(id) {
   await storeRequest("readwrite", store => store.delete(id));
+  removeSongFromAllPlaylists(id, { markDirty: !suppressCloudWrite });
 
   if (suppressCloudWrite) return;
 
@@ -1506,6 +1532,413 @@ function makeId() {
 
 function normalizeText(value) {
   return String(value ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase("ja");
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+
+
+const DEFAULT_PLAYLIST_ID = "next";
+
+function defaultPlaylistsState() {
+  return {
+    version: 1,
+    activePlaylistId: DEFAULT_PLAYLIST_ID,
+    playlists: [
+      { id: DEFAULT_PLAYLIST_ID, name: "次に歌う", songIds: [] }
+    ]
+  };
+}
+
+function normalizePlaylistsState(raw) {
+  const fallback = defaultPlaylistsState();
+  let parsed = raw;
+
+  if (typeof parsed === "string") {
+    try { parsed = JSON.parse(parsed); } catch { parsed = null; }
+  }
+
+  if (!parsed || typeof parsed !== "object") return fallback;
+
+  // v42以降はプレイリストを「次に歌う」1つだけに固定する。
+  // 旧バージョンで複数作成していた場合は、曲を失わないよう全プレイリストの曲を統合する。
+  const mergedSongIds = [];
+  const seenSongIds = new Set();
+  const sourcePlaylists = Array.isArray(parsed.playlists) ? parsed.playlists : [];
+
+  for (const item of sourcePlaylists) {
+    const ids = Array.isArray(item?.songIds) ? item.songIds : [];
+    for (const value of ids) {
+      const id = String(value || "").trim();
+      if (!id || seenSongIds.has(id)) continue;
+      seenSongIds.add(id);
+      mergedSongIds.push(id);
+    }
+  }
+
+  return {
+    version: 1,
+    activePlaylistId: DEFAULT_PLAYLIST_ID,
+    playlists: [
+      { id: DEFAULT_PLAYLIST_ID, name: "次に歌う", songIds: mergedSongIds }
+    ]
+  };
+}
+
+function getPlaylistsState() {
+  return normalizePlaylistsState(localStorage.getItem(PLAYLISTS_KEY));
+}
+
+function savePlaylistsState(state, { markDirty = true } = {}) {
+  const normalized = normalizePlaylistsState(state);
+  const now = new Date().toISOString();
+  localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(normalized));
+  localStorage.setItem(PLAYLISTS_UPDATED_AT_KEY, now);
+
+  if (markDirty) {
+    localStorage.setItem(PLAYLISTS_DIRTY_KEY, "1");
+    scheduleCloudSync("playlist-edit", 350);
+  }
+
+  updatePlaylistBadge();
+  if (els.playlistDialog?.open) renderPlaylistManager();
+  if (els.playlistPickerDialog?.open) renderPlaylistPicker();
+  render();
+  return normalized;
+}
+
+function activePlaylist(state = getPlaylistsState()) {
+  return state.playlists.find(item => item.id === state.activePlaylistId) || state.playlists[0];
+}
+
+function updatePlaylistBadge() {
+  const playlist = activePlaylist();
+  const count = playlist?.songIds?.length || 0;
+  if (els.playlistCountBadge) els.playlistCountBadge.textContent = String(count);
+}
+
+function openPlaylistManager() {
+  renderPlaylistManager();
+  if (!els.playlistDialog.open) els.playlistDialog.showModal();
+}
+
+function setActivePlaylist(id) {
+  const state = getPlaylistsState();
+  if (!state.playlists.some(item => item.id === id)) return;
+  state.activePlaylistId = id;
+  savePlaylistsState(state, { markDirty: true });
+}
+
+function createPlaylist() {
+  const raw = prompt("新しいプレイリスト名を入力してください。", "");
+  if (raw === null) return;
+
+  const name = String(raw).trim().replace(/\s+/g, " ");
+  if (!name) {
+    alert("プレイリスト名を入力してください。");
+    return;
+  }
+
+  const state = getPlaylistsState();
+  if (state.playlists.some(item => normalizeText(item.name) === normalizeText(name))) {
+    alert("同じ名前のプレイリストがあります。");
+    return;
+  }
+
+  const id = `pl-${makeId()}`;
+  state.playlists.push({ id, name, songIds: [] });
+  state.activePlaylistId = id;
+  savePlaylistsState(state);
+}
+
+function renameActivePlaylist() {
+  const state = getPlaylistsState();
+  const playlist = activePlaylist(state);
+  if (!playlist) return;
+
+  const raw = prompt("新しいプレイリスト名を入力してください。", playlist.name);
+  if (raw === null) return;
+
+  const name = String(raw).trim().replace(/\s+/g, " ");
+  if (!name) return;
+
+  if (state.playlists.some(item => item.id !== playlist.id && normalizeText(item.name) === normalizeText(name))) {
+    alert("同じ名前のプレイリストがあります。");
+    return;
+  }
+
+  playlist.name = name;
+  savePlaylistsState(state);
+}
+
+function deleteActivePlaylist() {
+  const state = getPlaylistsState();
+  const playlist = activePlaylist(state);
+  if (!playlist) return;
+
+  if (playlist.id === DEFAULT_PLAYLIST_ID) {
+    alert("「次に歌う」は標準プレイリストなので削除できません。中身を空にすることはできます。");
+    return;
+  }
+
+  if (!confirm(`プレイリスト「${playlist.name}」を削除しますか？`)) return;
+  state.playlists = state.playlists.filter(item => item.id !== playlist.id);
+  state.activePlaylistId = DEFAULT_PLAYLIST_ID;
+  savePlaylistsState(state);
+}
+
+function clearActivePlaylist() {
+  const state = getPlaylistsState();
+  const playlist = activePlaylist(state);
+  if (!playlist?.songIds?.length) return;
+
+  if (!confirm(`「${playlist.name}」の曲をすべて外しますか？`)) return;
+  playlist.songIds = [];
+  savePlaylistsState(state);
+}
+
+function openPlaylistPicker(songId) {
+  const song = songs.find(item => item.id === songId);
+  if (!song) return;
+
+  playlistPickerSongId = songId;
+  if (els.playlistPickerSong) els.playlistPickerSong.textContent = `${song.title} / ${song.artist}`;
+  renderPlaylistPicker();
+  if (!els.playlistPickerDialog.open) els.playlistPickerDialog.showModal();
+}
+
+function toggleSongInPlaylist(playlistId, songId) {
+  const state = getPlaylistsState();
+  const playlist = state.playlists.find(item => item.id === playlistId);
+  if (!playlist) return;
+
+  const exists = playlist.songIds.includes(songId);
+  playlist.songIds = exists
+    ? playlist.songIds.filter(id => id !== songId)
+    : [...playlist.songIds, songId];
+
+  savePlaylistsState(state);
+}
+
+function renderPlaylistPicker() {
+  if (!els.playlistPickerList) return;
+  const state = getPlaylistsState();
+  els.playlistPickerList.innerHTML = "";
+
+  for (const playlist of state.playlists) {
+    const added = playlist.songIds.includes(playlistPickerSongId);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `playlist-picker-item${added ? " added" : ""}`;
+    button.innerHTML = `<span>${escapeHtml(playlist.name)}</span><strong>${added ? "✓ 追加済み" : "＋ 追加"}</strong>`;
+    button.addEventListener("click", () => toggleSongInPlaylist(playlist.id, playlistPickerSongId));
+    els.playlistPickerList.append(button);
+  }
+
+  const newButton = document.createElement("button");
+  newButton.type = "button";
+  newButton.className = "playlist-picker-item new-playlist";
+  newButton.innerHTML = "<span>新しいプレイリスト</span><strong>＋ 作成</strong>";
+  newButton.addEventListener("click", () => {
+    createPlaylist();
+    renderPlaylistPicker();
+  });
+  els.playlistPickerList.append(newButton);
+}
+
+function playlistSongOpen(songId) {
+  if (els.playlistDialog?.open) els.playlistDialog.close();
+  setTimeout(() => {
+    if (appMode === "score") openScoreModeDialog(songId);
+    else if (appMode === "manage") openEditDialog(songId);
+    else openSongDetail(songId);
+  }, 0);
+}
+
+function movePlaylistSong(songId, direction) {
+  const state = getPlaylistsState();
+  const playlist = activePlaylist(state);
+  if (!playlist) return;
+
+  const index = playlist.songIds.indexOf(songId);
+  if (index < 0) return;
+  const target = index + direction;
+  if (target < 0 || target >= playlist.songIds.length) return;
+
+  [playlist.songIds[index], playlist.songIds[target]] = [playlist.songIds[target], playlist.songIds[index]];
+  savePlaylistsState(state);
+}
+
+function removeSongFromActivePlaylist(songId) {
+  const state = getPlaylistsState();
+  const playlist = activePlaylist(state);
+  if (!playlist) return;
+  playlist.songIds = playlist.songIds.filter(id => id !== songId);
+  savePlaylistsState(state);
+}
+
+function removeSongFromAllPlaylists(songId, { markDirty = true } = {}) {
+  const state = getPlaylistsState();
+  let changed = false;
+
+  for (const playlist of state.playlists) {
+    const next = playlist.songIds.filter(id => id !== songId);
+    if (next.length !== playlist.songIds.length) {
+      playlist.songIds = next;
+      changed = true;
+    }
+  }
+
+  if (changed) savePlaylistsState(state, { markDirty });
+  return changed;
+}
+
+function renderPlaylistManager() {
+  if (!els.playlistSongList) return;
+
+  const state = getPlaylistsState();
+  const playlist = activePlaylist(state);
+  if (!playlist) return;
+
+  if (els.playlistTitle) els.playlistTitle.textContent = "次に歌う";
+
+  const validSongs = playlist.songIds
+    .map(id => songs.find(song => song.id === id))
+    .filter(Boolean);
+
+  if (els.playlistMeta) els.playlistMeta.textContent = `${validSongs.length}曲`;
+  if (els.clearPlaylistBtn) els.clearPlaylistBtn.disabled = validSongs.length === 0;
+  els.playlistSongList.innerHTML = "";
+
+  if (!validSongs.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state compact";
+    empty.textContent = "まだ曲が入っていません。曲一覧の「＋」から追加できます。";
+    els.playlistSongList.append(empty);
+    return;
+  }
+
+  validSongs.forEach((song, index) => {
+    const row = document.createElement("div");
+    row.className = "playlist-song-row";
+
+    const order = document.createElement("span");
+    order.className = "playlist-song-order";
+    order.textContent = index === 0 ? "NEXT" : String(index + 1);
+
+    const main = document.createElement("button");
+    main.type = "button";
+    main.className = "playlist-song-main";
+    main.innerHTML = `<strong>${escapeHtml(song.title)}</strong><span>${escapeHtml(song.artist)}</span>`;
+    main.addEventListener("click", () => playlistSongOpen(song.id));
+
+    const actions = document.createElement("div");
+    actions.className = "playlist-song-actions";
+
+    const up = document.createElement("button");
+    up.type = "button";
+    up.className = "ghost-btn tiny-btn";
+    up.textContent = "↑";
+    up.disabled = index === 0;
+    up.addEventListener("click", () => movePlaylistSong(song.id, -1));
+
+    const down = document.createElement("button");
+    down.type = "button";
+    down.className = "ghost-btn tiny-btn";
+    down.textContent = "↓";
+    down.disabled = index === validSongs.length - 1;
+    down.addEventListener("click", () => movePlaylistSong(song.id, 1));
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "danger-btn tiny-btn";
+    remove.textContent = "×";
+    remove.addEventListener("click", () => removeSongFromActivePlaylist(song.id));
+
+    actions.append(up, down, remove);
+    row.append(order, main, actions);
+    els.playlistSongList.append(row);
+  });
+}
+
+async function fetchCloudPlaylists() {
+  const response = await cloudFetch(
+    `/rest/v1/${CLOUD_SETTINGS_TABLE}?key=eq.${encodeURIComponent(PLAYLISTS_SETTINGS_KEY)}&select=key,value,updated_at&limit=1`,
+    { method: "GET" }
+  );
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(text || `プレイリスト設定の取得エラー (${response.status})`);
+  }
+
+  const rows = await response.json().catch(() => []);
+  return Array.isArray(rows) ? (rows[0] || null) : null;
+}
+
+async function upsertCloudPlaylists(state) {
+  const now = new Date().toISOString();
+  const response = await cloudFetch(`/rest/v1/${CLOUD_SETTINGS_TABLE}?on_conflict=key`, {
+    method: "POST",
+    headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({
+      key: PLAYLISTS_SETTINGS_KEY,
+      value: normalizePlaylistsState(state),
+      updated_at: now
+    })
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(text || `プレイリスト設定の保存エラー (${response.status})`);
+  }
+
+  localStorage.setItem(PLAYLISTS_UPDATED_AT_KEY, now);
+  localStorage.removeItem(PLAYLISTS_DIRTY_KEY);
+}
+
+async function syncPlaylists() {
+  try {
+    const remote = await fetchCloudPlaylists();
+    const local = getPlaylistsState();
+    const dirty = localStorage.getItem(PLAYLISTS_DIRTY_KEY) === "1";
+
+    if (dirty) {
+      await upsertCloudPlaylists(local);
+      return true;
+    }
+
+    if (!remote) {
+      await upsertCloudPlaylists(local);
+      return true;
+    }
+
+    const remoteTime = new Date(remote.updated_at || 0).getTime();
+    const localTime = new Date(localStorage.getItem(PLAYLISTS_UPDATED_AT_KEY) || 0).getTime();
+
+    if (remoteTime >= localTime) {
+      const normalized = normalizePlaylistsState(remote.value);
+      localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(normalized));
+      localStorage.setItem(PLAYLISTS_UPDATED_AT_KEY, remote.updated_at || new Date().toISOString());
+      localStorage.removeItem(PLAYLISTS_DIRTY_KEY);
+      updatePlaylistBadge();
+      if (els.playlistDialog?.open) renderPlaylistManager();
+      if (els.playlistPickerDialog?.open) renderPlaylistPicker();
+      render();
+    }
+
+    return true;
+  } catch (error) {
+    console.warn("Playlist sync skipped:", error);
+    return false;
+  }
 }
 
 
@@ -2796,6 +3229,7 @@ function render() {
   const visible = getVisibleSongs();
 
   els.songCount.textContent = songs.length.toLocaleString("ja-JP");
+  updatePlaylistBadge();
   updateBulkSelectionUI();
 
   if (els.fastScoreDialog?.open) {
@@ -2832,6 +3266,25 @@ function render() {
     });
 
     const fav = node.querySelector(".favorite-btn");
+    const playlistAddBtn = node.querySelector(".playlist-add-btn");
+    const activeList = activePlaylist();
+    const inActivePlaylist = activeList?.songIds?.includes(song.id);
+    if (playlistAddBtn) {
+      playlistAddBtn.textContent = inActivePlaylist ? "✓" : "＋";
+      playlistAddBtn.classList.toggle("added", !!inActivePlaylist);
+      playlistAddBtn.title = inActivePlaylist
+        ? "「次に歌う」から外す"
+        : "「次に歌う」に追加";
+      playlistAddBtn.addEventListener("click", event => {
+        event.stopPropagation();
+        if (selectionMode) {
+          toggleSongSelection(song.id);
+          return;
+        }
+        toggleSongInPlaylist(DEFAULT_PLAYLIST_ID, song.id);
+      });
+    }
+
     fav.textContent = song.favorite ? "★" : "☆";
     fav.addEventListener("click", async event => {
       event.stopPropagation();
@@ -3866,12 +4319,13 @@ function updateBackupStatus() {
 function exportJSON() {
   const data = {
     app: "Karaoke Manager",
-    version: 37,
+    version: 40,
     exportedAt: new Date().toISOString(),
     songs,
     settings: {
       quickTags: getQuickTags(),
       tagBackgroundColors: getTagBackgroundColors(),
+      playlists: getPlaylistsState(),
       theme: localStorage.getItem(THEME_KEY) || "system"
     }
   };
@@ -3953,6 +4407,9 @@ async function importJSON(file) {
     }
     if (parsed?.settings?.tagBackgroundColors && typeof parsed.settings.tagBackgroundColors === "object") {
       saveTagBackgroundColors(parsed.settings.tagBackgroundColors, { markDirty: true });
+    }
+    if (parsed?.settings?.playlists && typeof parsed.settings.playlists === "object") {
+      savePlaylistsState(parsed.settings.playlists, { markDirty: true });
     }
     if (parsed?.settings?.theme) {
       applyTheme(parsed.settings.theme);
@@ -4198,6 +4655,13 @@ function bindEvents() {
   els.continuousAddBtn.addEventListener("click", openContinuousAddDialog);
   els.themeSelect.addEventListener("change", () => applyTheme(els.themeSelect.value));
 
+  els.playlistOpenBtn?.addEventListener("click", openPlaylistManager);
+  els.closePlaylistBtn?.addEventListener("click", () => els.playlistDialog.close());
+  els.playlistDoneBtn?.addEventListener("click", () => els.playlistDialog.close());
+  els.clearPlaylistBtn?.addEventListener("click", clearActivePlaylist);
+  els.closePlaylistPickerBtn?.addEventListener("click", () => els.playlistPickerDialog.close());
+  els.playlistPickerDoneBtn?.addEventListener("click", () => els.playlistPickerDialog.close());
+
   const closeMobileMore = () => {
     if (els.mobileMoreDialog?.open) els.mobileMoreDialog.close();
   };
@@ -4220,6 +4684,7 @@ function bindEvents() {
   els.mobileStatsBtn?.addEventListener("click", () => openFromMobileMore(openStatistics));
   els.mobileManageTagsBtn?.addEventListener("click", () => openFromMobileMore(openTagManager));
   els.mobileRandomBtn?.addEventListener("click", () => openFromMobileMore(chooseRandom));
+  els.mobilePlaylistBtn?.addEventListener("click", () => openFromMobileMore(openPlaylistManager));
   els.mobileCloudBtn?.addEventListener("click", () => openFromMobileMore(openCloudDialog));
   els.mobileCheckUpdateBtn?.addEventListener("click", () => {
     closeMobileMore();
@@ -4526,6 +4991,16 @@ function bindEvents() {
       return;
     }
 
+    if (event.key === "Escape" && els.playlistPickerDialog?.open) {
+      els.playlistPickerDialog.close();
+      return;
+    }
+
+    if (event.key === "Escape" && els.playlistDialog?.open) {
+      els.playlistDialog.close();
+      return;
+    }
+
     if (event.key === "Escape" && els.cloudDialog.open) {
       els.cloudDialog.close();
       return;
@@ -4590,6 +5065,10 @@ async function init() {
   els.sortSelect5.value = "";
   updateSortPriorityVisibility();
 
+  if (!localStorage.getItem(PLAYLISTS_KEY)) {
+    localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(defaultPlaylistsState()));
+  }
+  updatePlaylistBadge();
   updateCloudUI();
   updateBackupStatus();
   applyAppMode(appMode, { persist: false });

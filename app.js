@@ -1,4 +1,4 @@
-const APP_VERSION = "v38";
+const APP_VERSION = "v39";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -23,7 +23,8 @@ const TAG_COLORS_DIRTY_KEY = "karaokeManagerTagBackgroundColorsDirtyV1";
 const TAG_COLORS_UPDATED_AT_KEY = "karaokeManagerTagBackgroundColorsUpdatedAtV1";
 const SESSION_HOURS = 12;
 const APP_MODE_KEY = "karaokeManagerAppModeV1";
-let appMode = localStorage.getItem(APP_MODE_KEY) === "score" ? "score" : "manage";
+const savedAppMode = localStorage.getItem(APP_MODE_KEY);
+let appMode = ["score", "manage", "view"].includes(savedAppMode) ? savedAppMode : "manage";
 let scoreModeSongId = null;
 
 const SUPABASE_URL = "https://zrihlqlqgpbmtlhigceb.supabase.co";
@@ -64,6 +65,7 @@ const els = {
   pageTitle: document.querySelector("#pageTitle"),
   scoreModeBtn: document.querySelector("#scoreModeBtn"),
   manageModeBtn: document.querySelector("#manageModeBtn"),
+  viewModeBtn: document.querySelector("#viewModeBtn"),
   scoreModeDialog: document.querySelector("#scoreModeDialog"),
   closeScoreModeBtn: document.querySelector("#closeScoreModeBtn"),
   scoreModeTitle: document.querySelector("#scoreModeTitle"),
@@ -291,23 +293,37 @@ const els = {
 
 
 function applyAppMode(mode, { persist = true } = {}) {
-  appMode = mode === "score" ? "score" : "manage";
+  appMode = ["score", "manage", "view"].includes(mode) ? mode : "manage";
   document.body.dataset.appMode = appMode;
 
   if (persist) localStorage.setItem(APP_MODE_KEY, appMode);
 
   const scoreActive = appMode === "score";
-  els.scoreModeBtn?.classList.toggle("active", scoreActive);
-  els.manageModeBtn?.classList.toggle("active", !scoreActive);
-  els.scoreModeBtn?.setAttribute("aria-pressed", scoreActive ? "true" : "false");
-  els.manageModeBtn?.setAttribute("aria-pressed", scoreActive ? "false" : "true");
-  if (els.pageTitle) els.pageTitle.textContent = scoreActive ? "採点モード" : "曲管理";
+  const manageActive = appMode === "manage";
+  const viewActive = appMode === "view";
 
-  if (scoreActive && selectionMode) setSelectionMode(false);
+  els.scoreModeBtn?.classList.toggle("active", scoreActive);
+  els.manageModeBtn?.classList.toggle("active", manageActive);
+  els.viewModeBtn?.classList.toggle("active", viewActive);
+  els.scoreModeBtn?.setAttribute("aria-pressed", scoreActive ? "true" : "false");
+  els.manageModeBtn?.setAttribute("aria-pressed", manageActive ? "true" : "false");
+  els.viewModeBtn?.setAttribute("aria-pressed", viewActive ? "true" : "false");
+
+  if (els.pageTitle) {
+    els.pageTitle.textContent = scoreActive ? "採点モード" : viewActive ? "閲覧モード" : "曲管理";
+  }
+
+  if (!manageActive && selectionMode) setSelectionMode(false);
+
   if (scoreActive) {
     [els.songDialog, els.bulkEditDialog, els.tagManagerDialog, els.quickTagDialog,
      els.songDetailDialog, els.sessionHistoryDialog, els.statsDialog,
      els.randomDialog, els.mobileMoreDialog, els.cloudDialog].forEach(dialog => {
+      if (dialog?.open) dialog.close();
+    });
+  } else if (viewActive) {
+    [els.songDialog, els.bulkEditDialog, els.tagManagerDialog, els.quickTagDialog,
+     els.scoreModeDialog, els.mobileMoreDialog, els.cloudDialog].forEach(dialog => {
       if (dialog?.open) dialog.close();
     });
   } else if (els.scoreModeDialog?.open) {
@@ -2825,7 +2841,7 @@ function render() {
         return;
       }
 
-      if (appMode === "score") return;
+      if (appMode !== "manage") return;
 
       song.favorite = !song.favorite;
       song.updatedAt = new Date().toISOString();
@@ -2878,6 +2894,8 @@ function render() {
         toggleSongSelection(song.id);
       } else if (appMode === "score") {
         openScoreModeDialog(song.id);
+      } else if (appMode === "manage") {
+        openEditDialog(song.id);
       } else {
         openSongDetail(song.id);
       }
@@ -4165,6 +4183,7 @@ function resetSearchAndFilters() {
 function bindEvents() {
   els.scoreModeBtn?.addEventListener("click", () => applyAppMode("score"));
   els.manageModeBtn?.addEventListener("click", () => applyAppMode("manage"));
+  els.viewModeBtn?.addEventListener("click", () => applyAppMode("view"));
   els.closeScoreModeBtn?.addEventListener("click", () => els.scoreModeDialog.close());
   els.scoreModeAddDamBtn?.addEventListener("click", () => addScoreFromScoreMode("DAM"));
   els.scoreModeAddJoyBtn?.addEventListener("click", () => addScoreFromScoreMode("JOYSOUND"));
@@ -4453,6 +4472,7 @@ function bindEvents() {
 
   els.closeDetailBtn.addEventListener("click", () => els.songDetailDialog.close());
   els.detailEditBtn.addEventListener("click", () => {
+    if (appMode !== "manage") return;
     const id = detailSongId;
     els.songDetailDialog.close();
     if (id) openEditDialog(id);

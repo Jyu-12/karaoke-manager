@@ -3233,3 +3233,43 @@ body[data-app-mode="manage"] #mobileFastScoreBtn,
 body[data-app-mode="manage"] #songDialog .score-section {
   display: none !important;
 }
+
+
+/* v39: scoring / management / viewing modes */
+body[data-app-mode="view"] .header-actions,
+body[data-app-mode="view"] .summary-actions,
+body[data-app-mode="view"] .backup-panel,
+body[data-app-mode="view"] #bulkSelectionBar,
+body[data-app-mode="view"] .favorite-btn,
+body[data-app-mode="view"] .select-song-btn,
+body[data-app-mode="view"] #detailEditBtn {
+  display: none !important;
+}
+
+body[data-app-mode="view"] .summary {
+  justify-content: flex-start;
+}
+
+body[data-app-mode="view"] .song-card {
+  cursor: pointer;
+}
+
+body[data-app-mode="view"] .song-main {
+  padding-left: 10px;
+}
+
+body[data-app-mode="view"] .song-card:hover {
+  border-color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .mode-switch {
+    width: 100%;
+  }
+
+  .mode-switch-btn {
+    flex: 1 1 0;
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+}

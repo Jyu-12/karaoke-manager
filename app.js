@@ -1,4 +1,4 @@
-const APP_VERSION = "v42";
+const APP_VERSION = "v43";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -2646,9 +2646,10 @@ function getVisibleSongs() {
       if (compared !== 0) return compared;
     }
 
-    // 完全同順位のときだけ、表示を安定させるため曲名→アーティストで固定。
-    return a.title.localeCompare(b.title, "ja")
-      || a.artist.localeCompare(b.artist, "ja");
+    // ベースの並び順は常に「アーティスト → 曲名」。
+    // 並べ替え条件を指定した場合も、完全同順位の最後の基準として使う。
+    return a.artist.localeCompare(b.artist, "ja")
+      || a.title.localeCompare(b.title, "ja");
   });
 
   return result;

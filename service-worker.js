@@ -1,4 +1,4 @@
-const CACHE_NAME = "karaoke-manager-v42-single-playlist";
+const CACHE_NAME = "karaoke-manager-v43-artist-title-base";
 
 const CORE_ASSETS = [
   "./",

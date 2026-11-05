@@ -18,10 +18,14 @@
     <div>
       <div class="brand-row">
         <p class="eyebrow">KARAOKE MANAGER</p>
-        <span id="appVersion" class="version-badge">v34</span>
+        <span id="appVersion" class="version-badge">v36</span>
         <button id="checkUpdateBtn" class="update-check-btn" type="button" title="最新版を確認">↻ 更新</button>
       </div>
-      <h1>曲管理</h1>
+      <div class="mode-switch" role="group" aria-label="アプリモード">
+        <button id="scoreModeBtn" class="mode-switch-btn" type="button" aria-pressed="false">採点モード</button>
+        <button id="manageModeBtn" class="mode-switch-btn active" type="button" aria-pressed="true">管理モード</button>
+      </div>
+      <h1 id="pageTitle">曲管理</h1>
     </div>
     <div class="header-actions">
       <label class="theme-control mobile-more-source">
@@ -749,6 +753,46 @@
         <button type="submit" id="applyBulkEditBtn" class="primary-btn">一括適用</button>
       </div>
     </form>
+  </dialog>
+
+
+  <dialog id="scoreModeDialog" class="score-mode-dialog">
+    <div class="score-mode-card">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">SCORING</p>
+          <h2 id="scoreModeTitle">—</h2>
+          <p id="scoreModeArtist" class="score-mode-artist">—</p>
+        </div>
+        <button type="button" id="closeScoreModeBtn" class="icon-btn" aria-label="閉じる">✕</button>
+      </div>
+
+      <div class="score-mode-service-grid">
+        <section class="score-mode-service">
+          <div class="score-mode-service-head">
+            <strong>DAM</strong>
+            <span id="scoreModeDamBest" class="score-mode-best">最高 —</span>
+          </div>
+          <div class="score-mode-input-row">
+            <input id="scoreModeDamInput" type="number" inputmode="decimal" min="0" max="100" step="0.001" placeholder="例：92.456">
+            <button type="button" id="scoreModeAddDamBtn" class="primary-btn">追加</button>
+          </div>
+        </section>
+
+        <section class="score-mode-service">
+          <div class="score-mode-service-head">
+            <strong>JOYSOUND</strong>
+            <span id="scoreModeJoyBest" class="score-mode-best">最高 —</span>
+          </div>
+          <div class="score-mode-input-row">
+            <input id="scoreModeJoyInput" type="number" inputmode="decimal" min="0" max="100" step="0.001" placeholder="例：94.321">
+            <button type="button" id="scoreModeAddJoyBtn" class="primary-btn">追加</button>
+          </div>
+        </section>
+      </div>
+
+      <p id="scoreModeMessage" class="form-error score-mode-message" role="status"></p>
+    </div>
   </dialog>
 
   <template id="songCardTemplate">

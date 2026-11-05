@@ -1,3 +1,12 @@
+# Karaoke Manager PWA v36 - 採点 / 管理モード
+
+- 採点モード: 曲カードを押すとDAM / JOYSOUNDの点数追加だけができます。管理系ボタン、お気に入り変更、編集・削除・追加は非表示です。
+- 管理モード: v35までの管理機能をそのまま利用できます。
+- モードは端末ごとに記憶されます。
+- v35のタグ背景色設定・端末間自動同期は維持しています。
+
+---
+
 # Karaoke Manager PWA - v35 Tag Background Colors
 
 # Karaoke Manager PWA - v12 Cloud Sync

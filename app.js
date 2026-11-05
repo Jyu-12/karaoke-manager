@@ -1,4 +1,4 @@
-const APP_VERSION = "v35";
+const APP_VERSION = "v36";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -22,6 +22,9 @@ const TAG_COLORS_KEY = "karaokeManagerTagBackgroundColorsV1";
 const TAG_COLORS_DIRTY_KEY = "karaokeManagerTagBackgroundColorsDirtyV1";
 const TAG_COLORS_UPDATED_AT_KEY = "karaokeManagerTagBackgroundColorsUpdatedAtV1";
 const SESSION_HOURS = 12;
+const APP_MODE_KEY = "karaokeManagerAppModeV1";
+let appMode = localStorage.getItem(APP_MODE_KEY) === "score" ? "score" : "manage";
+let scoreModeSongId = null;
 
 const SUPABASE_URL = "https://zrihlqlqgpbmtlhigceb.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_9OK0z69_4ZSo_RVX9WXXfQ_x7nMOWEk";
@@ -58,6 +61,20 @@ const DEFAULT_QUICK_TAGS = [
 const els = {
   songCount: document.querySelector("#songCount"),
   songList: document.querySelector("#songList"),
+  pageTitle: document.querySelector("#pageTitle"),
+  scoreModeBtn: document.querySelector("#scoreModeBtn"),
+  manageModeBtn: document.querySelector("#manageModeBtn"),
+  scoreModeDialog: document.querySelector("#scoreModeDialog"),
+  closeScoreModeBtn: document.querySelector("#closeScoreModeBtn"),
+  scoreModeTitle: document.querySelector("#scoreModeTitle"),
+  scoreModeArtist: document.querySelector("#scoreModeArtist"),
+  scoreModeDamBest: document.querySelector("#scoreModeDamBest"),
+  scoreModeJoyBest: document.querySelector("#scoreModeJoyBest"),
+  scoreModeDamInput: document.querySelector("#scoreModeDamInput"),
+  scoreModeJoyInput: document.querySelector("#scoreModeJoyInput"),
+  scoreModeAddDamBtn: document.querySelector("#scoreModeAddDamBtn"),
+  scoreModeAddJoyBtn: document.querySelector("#scoreModeAddJoyBtn"),
+  scoreModeMessage: document.querySelector("#scoreModeMessage"),
   searchInput: document.querySelector("#searchInput"),
   mobileSearchInput: document.querySelector("#mobileSearchInput"),
   sortSelect: document.querySelector("#sortSelect"),
@@ -257,6 +274,117 @@ const els = {
   randomCloseBtn: document.querySelector("#randomCloseBtn"),
 };
 
+
+
+function applyAppMode(mode, { persist = true } = {}) {
+  appMode = mode === "score" ? "score" : "manage";
+  document.body.dataset.appMode = appMode;
+
+  if (persist) localStorage.setItem(APP_MODE_KEY, appMode);
+
+  const scoreActive = appMode === "score";
+  els.scoreModeBtn?.classList.toggle("active", scoreActive);
+  els.manageModeBtn?.classList.toggle("active", !scoreActive);
+  els.scoreModeBtn?.setAttribute("aria-pressed", scoreActive ? "true" : "false");
+  els.manageModeBtn?.setAttribute("aria-pressed", scoreActive ? "false" : "true");
+  if (els.pageTitle) els.pageTitle.textContent = scoreActive ? "採点モード" : "曲管理";
+
+  if (scoreActive && selectionMode) setSelectionMode(false);
+  if (scoreActive) {
+    [els.songDialog, els.bulkEditDialog, els.tagManagerDialog, els.quickTagDialog,
+     els.songDetailDialog, els.sessionHistoryDialog, els.statsDialog,
+     els.randomDialog, els.mobileMoreDialog, els.cloudDialog].forEach(dialog => {
+      if (dialog?.open) dialog.close();
+    });
+  } else if (els.scoreModeDialog?.open) {
+    els.scoreModeDialog.close();
+  }
+
+  render();
+}
+
+function scoreModeBestText(entries) {
+  const values = normalizeScoreEntries(entries)
+    .map(entry => Number(entry.score))
+    .filter(Number.isFinite);
+  if (!values.length) return "最高 —";
+  return `最高 ${formatScore(Math.max(...values))}点`;
+}
+
+function refreshScoreModeDialog() {
+  const song = songs.find(item => item.id === scoreModeSongId);
+  if (!song) return;
+  els.scoreModeTitle.textContent = song.title;
+  els.scoreModeArtist.textContent = song.artist;
+  els.scoreModeDamBest.textContent = scoreModeBestText(damScoresOf(song));
+  els.scoreModeJoyBest.textContent = scoreModeBestText(joysoundScoresOf(song));
+}
+
+function openScoreModeDialog(songId) {
+  if (appMode !== "score") return;
+  const song = songs.find(item => item.id === songId);
+  if (!song) return;
+
+  scoreModeSongId = song.id;
+  els.scoreModeDamInput.value = "";
+  els.scoreModeJoyInput.value = "";
+  els.scoreModeMessage.textContent = "";
+  els.scoreModeMessage.classList.remove("best-message");
+  refreshScoreModeDialog();
+  if (!els.scoreModeDialog.open) els.scoreModeDialog.showModal();
+  setTimeout(() => els.scoreModeDamInput.focus(), 0);
+}
+
+async function addScoreFromScoreMode(service) {
+  if (appMode !== "score") return;
+  const song = songs.find(item => item.id === scoreModeSongId);
+  if (!song) return;
+
+  const input = service === "DAM" ? els.scoreModeDamInput : els.scoreModeJoyInput;
+  const raw = input.value.trim();
+  const score = Number(raw);
+  if (!raw || !Number.isFinite(score) || score < 0 || score > 100) {
+    els.scoreModeMessage.textContent = "点数は0〜100の範囲で入力してください。";
+    input.focus();
+    input.select();
+    return;
+  }
+
+  const normalizedScore = Math.round(score * 1000) / 1000;
+  const recordedAt = new Date().toISOString();
+  const entry = { score: normalizedScore, recordedAt };
+  const currentEntries = service === "DAM" ? damScoresOf(song) : joysoundScoresOf(song);
+  const previousBest = currentEntries.length
+    ? Math.max(...currentEntries.map(item => Number(item.score)).filter(Number.isFinite))
+    : null;
+
+  const updated = {
+    ...song,
+    damScores: service === "DAM" ? [...damScoresOf(song), entry] : damScoresOf(song),
+    joysoundScores: service === "JOYSOUND" ? [...joysoundScoresOf(song), entry] : joysoundScoresOf(song),
+    updatedAt: recordedAt,
+  };
+
+  try {
+    await putSong(updated);
+    songs = await getAllSongs();
+    render();
+    refreshScoreModeDialog();
+    input.value = "";
+
+    if (previousBest !== null && normalizedScore > previousBest) {
+      els.scoreModeMessage.textContent = `🎉 ${service}自己ベスト更新！ ${formatScore(previousBest)}点 → ${formatScore(normalizedScore)}点`;
+      els.scoreModeMessage.classList.add("best-message");
+    } else {
+      els.scoreModeMessage.textContent = `${service} ${formatScore(normalizedScore)}点を保存しました。`;
+      els.scoreModeMessage.classList.remove("best-message");
+    }
+    input.focus();
+  } catch (error) {
+    console.error("score mode save failed", error);
+    els.scoreModeMessage.textContent = "点数を保存できませんでした。もう一度お試しください。";
+  }
+}
 
 function setUpdateButtonState(text, disabled = false) {
   if (!els.checkUpdateBtn) return;
@@ -2667,6 +2795,8 @@ function render() {
         return;
       }
 
+      if (appMode === "score") return;
+
       song.favorite = !song.favorite;
       song.updatedAt = new Date().toISOString();
       await putSong(song);
@@ -2714,6 +2844,8 @@ function render() {
     node.querySelector(".song-main").addEventListener("click", () => {
       if (selectionMode) {
         toggleSongSelection(song.id);
+      } else if (appMode === "score") {
+        openScoreModeDialog(song.id);
       } else {
         openSongDetail(song.id);
       }
@@ -3201,6 +3333,7 @@ function clearSongForm({ keepArtist = false } = {}) {
 }
 
 function openAddDialog() {
+  if (appMode !== "manage") return;
   setFormMode("add");
   clearSongForm();
   els.songDialog.showModal();
@@ -3208,6 +3341,7 @@ function openAddDialog() {
 }
 
 function openContinuousAddDialog() {
+  if (appMode !== "manage") return;
   setFormMode("continuous");
   clearSongForm();
   els.keepArtistInput.checked = false;
@@ -3216,6 +3350,7 @@ function openContinuousAddDialog() {
 }
 
 function openEditDialog(id) {
+  if (appMode !== "manage") return;
   const song = songs.find(s => s.id === id);
   if (!song) return;
 
@@ -3681,7 +3816,7 @@ function updateBackupStatus() {
 function exportJSON() {
   const data = {
     app: "Karaoke Manager",
-    version: 35,
+    version: 36,
     exportedAt: new Date().toISOString(),
     songs,
     settings: {
@@ -3967,6 +4102,18 @@ function resetSearchAndFilters() {
 }
 
 function bindEvents() {
+  els.scoreModeBtn?.addEventListener("click", () => applyAppMode("score"));
+  els.manageModeBtn?.addEventListener("click", () => applyAppMode("manage"));
+  els.closeScoreModeBtn?.addEventListener("click", () => els.scoreModeDialog.close());
+  els.scoreModeAddDamBtn?.addEventListener("click", () => addScoreFromScoreMode("DAM"));
+  els.scoreModeAddJoyBtn?.addEventListener("click", () => addScoreFromScoreMode("JOYSOUND"));
+  els.scoreModeDamInput?.addEventListener("keydown", event => {
+    if (event.key === "Enter") { event.preventDefault(); addScoreFromScoreMode("DAM"); }
+  });
+  els.scoreModeJoyInput?.addEventListener("keydown", event => {
+    if (event.key === "Enter") { event.preventDefault(); addScoreFromScoreMode("JOYSOUND"); }
+  });
+
   els.addSongBtn.addEventListener("click", openAddDialog);
   els.continuousAddBtn.addEventListener("click", openContinuousAddDialog);
   els.themeSelect.addEventListener("change", () => applyTheme(els.themeSelect.value));
@@ -4255,7 +4402,7 @@ function bindEvents() {
   });
 
   document.addEventListener("keydown", event => {
-    if (event.key === "Insert" && !selectionMode && !els.songDialog.open && !els.randomDialog.open && !els.bulkEditDialog.open && !els.fastScoreDialog.open) {
+    if (appMode === "manage" && event.key === "Insert" && !selectionMode && !els.songDialog.open && !els.randomDialog.open && !els.bulkEditDialog.open && !els.fastScoreDialog.open) {
       event.preventDefault();
       openAddDialog();
     }
@@ -4273,6 +4420,11 @@ function bindEvents() {
         target.focus();
         target.select();
       }
+    }
+
+    if (event.key === "Escape" && els.scoreModeDialog?.open) {
+      els.scoreModeDialog.close();
+      return;
     }
 
     if (event.key === "Escape" && els.fastScoreDialog.open) {
@@ -4345,7 +4497,7 @@ async function init() {
 
   updateCloudUI();
   updateBackupStatus();
-  render();
+  applyAppMode(appMode, { persist: false });
 
   if (navigator.onLine) {
     await syncCloud({ silent: true, reason: "startup" });

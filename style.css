@@ -3030,3 +3030,156 @@ html[data-theme="light"] .filter-chip.active {
     justify-content: space-between;
   }
 }
+
+/* v36: scoring / management modes */
+.mode-switch {
+  display: inline-flex;
+  gap: 2px;
+  margin-top: 7px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--panel-2);
+}
+
+.mode-switch-btn {
+  min-height: 30px;
+  padding: 5px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.mode-switch-btn.active {
+  background: var(--text);
+  color: var(--bg);
+}
+
+body[data-app-mode="score"] .header-actions,
+body[data-app-mode="score"] .summary-actions,
+body[data-app-mode="score"] .backup-panel,
+body[data-app-mode="score"] #bulkSelectionBar,
+body[data-app-mode="score"] .favorite-btn,
+body[data-app-mode="score"] .select-song-btn {
+  display: none !important;
+}
+
+body[data-app-mode="score"] .summary {
+  justify-content: flex-start;
+}
+
+body[data-app-mode="score"] .song-card {
+  cursor: pointer;
+}
+
+body[data-app-mode="score"] .song-main {
+  padding-left: 10px;
+}
+
+body[data-app-mode="score"] .song-card:hover {
+  border-color: var(--muted);
+}
+
+.score-mode-dialog {
+  width: min(560px, calc(100% - 24px));
+  max-width: 560px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.score-mode-card {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 18px 50px rgba(0,0,0,.26);
+}
+
+.score-mode-artist {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.score-mode-service-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.score-mode-service {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--panel-2);
+}
+
+.score-mode-service-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.score-mode-best {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.score-mode-input-row {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: 7px;
+}
+
+.score-mode-input-row input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+}
+
+.score-mode-message {
+  min-height: 20px;
+  margin: 12px 0 0;
+}
+
+@media (max-width: 640px) {
+  .mode-switch {
+    margin-top: 5px;
+  }
+
+  .mode-switch-btn {
+    min-height: 28px;
+    padding: 4px 9px;
+    font-size: 10.5px;
+  }
+
+  .score-mode-dialog {
+    width: calc(100% - 12px);
+    max-height: calc(100dvh - 12px);
+    margin-top: max(6px, env(safe-area-inset-top));
+  }
+
+  .score-mode-card {
+    padding: max(14px, env(safe-area-inset-top)) 12px 14px;
+    border-radius: 15px;
+  }
+
+  .score-mode-service-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}

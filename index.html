@@ -18,7 +18,7 @@
     <div>
       <div class="brand-row">
         <p class="eyebrow">KARAOKE MANAGER</p>
-        <span id="appVersion" class="version-badge">v36</span>
+        <span id="appVersion" class="version-badge">v38</span>
         <button id="checkUpdateBtn" class="update-check-btn" type="button" title="最新版を確認">↻ 更新</button>
       </div>
       <div class="mode-switch" role="group" aria-label="アプリモード">
@@ -85,11 +85,57 @@
           </select>
         </label>
 
-        <label>
-          タグ
-          <select id="tagFilterSelect">
-            <option value="">すべてのタグ</option>
-          </select>
+        <label id="tagFilterCondition1Wrap" class="tag-filter-condition">
+          <span>タグ条件1</span>
+          <div class="tag-filter-controls">
+            <select id="tagFilterSelect">
+              <option value="">すべてのタグ</option>
+            </select>
+            <select id="tagFilterModeSelect" aria-label="タグ条件1の判定">
+              <option value="include">含む</option>
+              <option value="exclude">以外</option>
+            </select>
+          </div>
+        </label>
+
+        <label id="tagFilterCondition2Wrap" class="tag-filter-condition hidden">
+          <span>タグ条件2</span>
+          <div class="tag-filter-controls">
+            <select id="tagFilterSelect2"><option value="">指定なし</option></select>
+            <select id="tagFilterModeSelect2" aria-label="タグ条件2の判定">
+              <option value="include">含む</option><option value="exclude">以外</option>
+            </select>
+          </div>
+        </label>
+
+        <label id="tagFilterCondition3Wrap" class="tag-filter-condition hidden">
+          <span>タグ条件3</span>
+          <div class="tag-filter-controls">
+            <select id="tagFilterSelect3"><option value="">指定なし</option></select>
+            <select id="tagFilterModeSelect3" aria-label="タグ条件3の判定">
+              <option value="include">含む</option><option value="exclude">以外</option>
+            </select>
+          </div>
+        </label>
+
+        <label id="tagFilterCondition4Wrap" class="tag-filter-condition hidden">
+          <span>タグ条件4</span>
+          <div class="tag-filter-controls">
+            <select id="tagFilterSelect4"><option value="">指定なし</option></select>
+            <select id="tagFilterModeSelect4" aria-label="タグ条件4の判定">
+              <option value="include">含む</option><option value="exclude">以外</option>
+            </select>
+          </div>
+        </label>
+
+        <label id="tagFilterCondition5Wrap" class="tag-filter-condition hidden">
+          <span>タグ条件5</span>
+          <div class="tag-filter-controls">
+            <select id="tagFilterSelect5"><option value="">指定なし</option></select>
+            <select id="tagFilterModeSelect5" aria-label="タグ条件5の判定">
+              <option value="include">含む</option><option value="exclude">以外</option>
+            </select>
+          </div>
         </label>
 
         <label>

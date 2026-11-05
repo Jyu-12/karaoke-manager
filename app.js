@@ -1,4 +1,4 @@
-const APP_VERSION = "v36";
+const APP_VERSION = "v38";
 const DB_NAME = "karaokeManagerDB";
 const DB_VERSION = 1;
 const STORE = "songs";
@@ -90,6 +90,20 @@ const els = {
   resetFiltersBtn: document.querySelector("#resetFiltersBtn"),
   artistFilterSelect: document.querySelector("#artistFilterSelect"),
   tagFilterSelect: document.querySelector("#tagFilterSelect"),
+  tagFilterSelect2: document.querySelector("#tagFilterSelect2"),
+  tagFilterSelect3: document.querySelector("#tagFilterSelect3"),
+  tagFilterSelect4: document.querySelector("#tagFilterSelect4"),
+  tagFilterSelect5: document.querySelector("#tagFilterSelect5"),
+  tagFilterModeSelect: document.querySelector("#tagFilterModeSelect"),
+  tagFilterModeSelect2: document.querySelector("#tagFilterModeSelect2"),
+  tagFilterModeSelect3: document.querySelector("#tagFilterModeSelect3"),
+  tagFilterModeSelect4: document.querySelector("#tagFilterModeSelect4"),
+  tagFilterModeSelect5: document.querySelector("#tagFilterModeSelect5"),
+  tagFilterCondition1Wrap: document.querySelector("#tagFilterCondition1Wrap"),
+  tagFilterCondition2Wrap: document.querySelector("#tagFilterCondition2Wrap"),
+  tagFilterCondition3Wrap: document.querySelector("#tagFilterCondition3Wrap"),
+  tagFilterCondition4Wrap: document.querySelector("#tagFilterCondition4Wrap"),
+  tagFilterCondition5Wrap: document.querySelector("#tagFilterCondition5Wrap"),
   recentFilterSelect: document.querySelector("#recentFilterSelect"),
   themeSelect: document.querySelector("#themeSelect"),
   addSongBtn: document.querySelector("#addSongBtn"),
@@ -2039,7 +2053,8 @@ function duplicateKey(song) {
 function refreshFilters() {
   refreshAutocomplete();
   const selectedArtist = els.artistFilterSelect.value;
-  const selectedTag = els.tagFilterSelect.value;
+  const tagSelects = [els.tagFilterSelect, els.tagFilterSelect2, els.tagFilterSelect3, els.tagFilterSelect4, els.tagFilterSelect5];
+  const selectedTags = tagSelects.map(select => select?.value || "");
 
   const artists = [...new Set(songs.map(song => String(song.artist || "").trim()).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, "ja"));
@@ -2061,20 +2076,31 @@ function refreshFilters() {
   const tags = [...new Set(songs.flatMap(song => parseTags(song.tags)))]
     .sort((a, b) => a.localeCompare(b, "ja"));
 
-  els.tagFilterSelect.innerHTML = '<option value="">すべてのタグ</option>';
-  for (const tag of tags) {
-    const option = document.createElement("option");
-    option.value = tag;
-    option.textContent = tag;
-    els.tagFilterSelect.append(option);
-  }
-  if (tags.includes(selectedTag)) els.tagFilterSelect.value = selectedTag;
-}
+  tagSelects.forEach((select, index) => {
+    if (!select) return;
+    select.innerHTML = index === 0
+      ? '<option value="">すべてのタグ</option>'
+      : '<option value="">指定なし</option>';
+    for (const tag of tags) {
+      const option = document.createElement("option");
+      option.value = tag;
+      option.textContent = tag;
+      select.append(option);
+    }
+    if (tags.includes(selectedTags[index])) select.value = selectedTags[index];
+  });
 
+  updateTagFilterVisibility();
+}
 function getVisibleSongs() {
   const q = normalizeText(els.searchInput.value);
   const artistFilter = els.artistFilterSelect.value;
-  const tagFilter = els.tagFilterSelect.value;
+  const tagFilterSelects = [els.tagFilterSelect, els.tagFilterSelect2, els.tagFilterSelect3, els.tagFilterSelect4, els.tagFilterSelect5];
+  const tagFilterModes = [els.tagFilterModeSelect, els.tagFilterModeSelect2, els.tagFilterModeSelect3, els.tagFilterModeSelect4, els.tagFilterModeSelect5];
+  const tagConditions = tagFilterSelects.map((select, index) => ({
+    tag: select?.value || "",
+    mode: tagFilterModes[index]?.value || "include"
+  })).filter(condition => condition.tag);
   const recentFilter = els.recentFilterSelect.value;
 
   let result = songs.filter(song => {
@@ -2085,7 +2111,11 @@ function getVisibleSongs() {
     if (artistFilter && normalizeText(song.artist) !== normalizeText(artistFilter)) return false;
 
     const songTags = parseTags(song.tags);
-    if (tagFilter && !songTags.some(tag => normalizeText(tag) === normalizeText(tagFilter))) return false;
+    const songTagKeys = new Set(songTags.map(normalizeText));
+    for (const condition of tagConditions) {
+      const hasTag = songTagKeys.has(normalizeText(condition.tag));
+      if (condition.mode === "exclude" ? hasTag : !hasTag) return false;
+    }
 
     if (recentFilter === "never" && hasEverSung(song)) return false;
     if (["1", "2", "3", "5", "10"].includes(recentFilter)) {
@@ -2836,6 +2866,8 @@ function render() {
         }
 
         els.tagFilterSelect.value = tag;
+        if (els.tagFilterModeSelect) els.tagFilterModeSelect.value = "include";
+        updateTagFilterVisibility(0);
         render();
       });
       tagRow.append(chip);
@@ -3816,7 +3848,7 @@ function updateBackupStatus() {
 function exportJSON() {
   const data = {
     app: "Karaoke Manager",
-    version: 36,
+    version: 37,
     exportedAt: new Date().toISOString(),
     songs,
     settings: {
@@ -4062,6 +4094,29 @@ function requestAutoSync(reason = "resume") {
 }
 
 
+function updateTagFilterVisibility(changedIndex = null) {
+  const selects = [els.tagFilterSelect, els.tagFilterSelect2, els.tagFilterSelect3, els.tagFilterSelect4, els.tagFilterSelect5];
+  const modes = [els.tagFilterModeSelect, els.tagFilterModeSelect2, els.tagFilterModeSelect3, els.tagFilterModeSelect4, els.tagFilterModeSelect5];
+  const wraps = [els.tagFilterCondition1Wrap, els.tagFilterCondition2Wrap, els.tagFilterCondition3Wrap, els.tagFilterCondition4Wrap, els.tagFilterCondition5Wrap];
+
+  if (Number.isInteger(changedIndex) && changedIndex >= 0 && !selects[changedIndex]?.value) {
+    for (let i = changedIndex + 1; i < selects.length; i++) {
+      if (selects[i]) selects[i].value = "";
+      if (modes[i]) modes[i].value = "include";
+    }
+  }
+
+  wraps.forEach((wrap, index) => {
+    if (!wrap) return;
+    const shouldShow = index === 0 || !!selects[index - 1]?.value;
+    wrap.classList.toggle("hidden", !shouldShow);
+    if (!shouldShow) {
+      if (selects[index]) selects[index].value = "";
+      if (modes[index]) modes[index].value = "include";
+    }
+  });
+}
+
 function updateSortPriorityVisibility(changedIndex = null) {
   const selects = [els.sortSelect, els.sortSelect2, els.sortSelect3, els.sortSelect4, els.sortSelect5];
   const wraps = [els.sortPriority1Wrap, els.sortPriority2Wrap, els.sortPriority3Wrap, els.sortPriority4Wrap, els.sortPriority5Wrap];
@@ -4094,7 +4149,13 @@ function resetSearchAndFilters() {
 
   els.artistFilterSelect.value = "";
   if (els.mobileArtistFilterSelect) els.mobileArtistFilterSelect.value = "";
-  els.tagFilterSelect.value = "";
+  [els.tagFilterSelect, els.tagFilterSelect2, els.tagFilterSelect3, els.tagFilterSelect4, els.tagFilterSelect5].forEach(select => {
+    if (select) select.value = "";
+  });
+  [els.tagFilterModeSelect, els.tagFilterModeSelect2, els.tagFilterModeSelect3, els.tagFilterModeSelect4, els.tagFilterModeSelect5].forEach(select => {
+    if (select) select.value = "include";
+  });
+  updateTagFilterVisibility();
   els.recentFilterSelect.value = "";
 
   // 並べ替え優先度1・2は現在の選択をそのまま保持する。
@@ -4333,7 +4394,15 @@ function bindEvents() {
     if (els.mobileArtistFilterSelect) els.mobileArtistFilterSelect.value = els.artistFilterSelect.value;
     render();
   });
-  els.tagFilterSelect.addEventListener("change", render);
+  [els.tagFilterSelect, els.tagFilterSelect2, els.tagFilterSelect3, els.tagFilterSelect4, els.tagFilterSelect5].forEach((select, index) => {
+    select?.addEventListener("change", () => {
+      updateTagFilterVisibility(index);
+      render();
+    });
+  });
+  [els.tagFilterModeSelect, els.tagFilterModeSelect2, els.tagFilterModeSelect3, els.tagFilterModeSelect4, els.tagFilterModeSelect5].forEach(select => {
+    select?.addEventListener("change", render);
+  });
   els.recentFilterSelect.addEventListener("change", render);
 
   document.querySelectorAll(".filter-chip").forEach(btn => {
@@ -4486,7 +4555,13 @@ async function init() {
   currentFilter = "all";
   els.artistFilterSelect.value = "";
   if (els.mobileArtistFilterSelect) els.mobileArtistFilterSelect.value = "";
-  els.tagFilterSelect.value = "";
+  [els.tagFilterSelect, els.tagFilterSelect2, els.tagFilterSelect3, els.tagFilterSelect4, els.tagFilterSelect5].forEach(select => {
+    if (select) select.value = "";
+  });
+  [els.tagFilterModeSelect, els.tagFilterModeSelect2, els.tagFilterModeSelect3, els.tagFilterModeSelect4, els.tagFilterModeSelect5].forEach(select => {
+    if (select) select.value = "include";
+  });
+  updateTagFilterVisibility();
   els.recentFilterSelect.value = "";
   els.sortSelect.value = "";
   els.sortSelect2.value = "";

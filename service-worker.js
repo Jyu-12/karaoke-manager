@@ -1,4 +1,4 @@
-const CACHE_NAME = "karaoke-manager-v36-modes";
+const CACHE_NAME = "karaoke-manager-v38-score-separation";
 
 const CORE_ASSETS = [
   "./",

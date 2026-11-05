@@ -3183,3 +3183,53 @@ body[data-app-mode="score"] .song-card:hover {
     gap: 8px;
   }
 }
+
+
+/* v37: tag include/exclude filter conditions */
+.tag-filter-condition {
+  min-width: 220px;
+}
+
+.tag-filter-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.select-row .tag-filter-controls select {
+  margin: 0;
+}
+
+.select-row .tag-filter-controls select:first-child {
+  min-width: 128px;
+  flex: 1 1 auto;
+}
+
+.select-row .tag-filter-controls select:last-child {
+  width: 74px;
+  flex: 0 0 74px;
+}
+
+@media (max-width: 720px) {
+  .tag-filter-condition {
+    min-width: 0;
+  }
+
+  .select-row .tag-filter-controls select:first-child {
+    min-width: 0;
+  }
+
+  .select-row .tag-filter-controls select:last-child {
+    width: 68px;
+    flex-basis: 68px;
+  }
+}
+
+
+/* v38: scoring input is exclusive to scoring mode */
+body[data-app-mode="manage"] #fastScoreBtn,
+body[data-app-mode="manage"] #mobileFastScoreBtn,
+body[data-app-mode="manage"] #songDialog .score-section {
+  display: none !important;
+}
